@@ -16,7 +16,11 @@ import (
 type ongoingDownload struct {
 	P        packet.Packet
 	filesize int64
-	written  int64
+
+	// force alignment of atomically accessed "written"
+	_       int32
+	written int64
+
 	filename string
 }
 
