@@ -1,28 +1,31 @@
 package packet
 
 import (
-	"strconv"
 	"strings"
 	"unicode"
 )
 
 type version struct {
-	epoch int
+	epoch string
 	v     string
+	rel   string
 }
 
 func getVersion(s string) (v version, err error) {
 	sp := strings.SplitN(s, ":", 2)
 	if len(sp) == 2 {
-		v.epoch, err = strconv.Atoi(sp[0])
-		if err != nil {
-			return
-		}
+		v.epoch = sp[0]
 		sp[0] = sp[1]
 	} else {
-		v.epoch = 0
+		v.epoch = "0"
 	}
-	v.v = sp[0]
+	sp = strings.SplitN(sp[0], "-", 2)
+	if len(sp) >= 2 {
+		v.v = sp[0]
+		v.rel = sp[1]
+	} else {
+		v.v = sp[0]
+	}
 	return
 }
 
@@ -149,10 +152,15 @@ func CompareVersions(v1, v2 string) (r int, err error) {
 		return
 	}
 
-	r = cmp(a.epoch, b.epoch)
+	r = rpmvercmp(a.epoch, b.epoch)
 	if r != 0 {
-		return r, nil
+		return
 	}
 
-	return rpmvercmp(a.v, b.v), nil
+	r = rpmvercmp(a.v, b.v)
+	if r != 0 {
+		return
+	}
+
+	return rpmvercmp(a.rel, b.rel), nil
 }
