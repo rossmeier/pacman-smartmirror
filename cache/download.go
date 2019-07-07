@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
+	"github.com/veecue/pacman-smartmirror/database"
 	"github.com/veecue/pacman-smartmirror/packet"
 )
 
@@ -42,7 +43,7 @@ func (dl *ongoingDownload) GetReader() (io.ReadSeeker, error) {
 // background and add it to the cache once finished.
 //
 // Returns info about the ongoing download so it can be served to the client.
-func (c *Cache) startDownload(p *packet.Packet, repo string) (*ongoingDownload, error) {
+func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ongoingDownload, error) {
 	for _, mirror := range c.mirrors {
 		req, _ := http.NewRequest("GET", mirror.PacketURL(p, repo), nil)
 		req.Header.Set("User-Agent", "pacman-smartmirror/0.0")

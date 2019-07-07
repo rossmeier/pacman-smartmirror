@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/veecue/pacman-smartmirror/cache"
+	"github.com/veecue/pacman-smartmirror/database"
 	"github.com/veecue/pacman-smartmirror/packet"
 )
 
@@ -41,13 +42,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repo := parts[1]
 	if parts[2] != "os" {
 		http.NotFound(w, r)
 		return
 	}
 
-	arch := parts[3]
+	repo := &database.Repository{
+		Name: parts[1],
+		Arch: parts[3],
+	}
+
 	filename := parts[4]
 
 	if strings.HasSuffix(filename, ".db") {
@@ -59,11 +63,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p, err := packet.FromFilename(filename)
 	if err != nil {
 		w.WriteHeader(500)
-		return
-	}
-
-	if arch != p.Arch {
-		http.NotFound(w, r)
 		return
 	}
 

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/veecue/pacman-smartmirror/database"
 	"github.com/veecue/pacman-smartmirror/mirrorlist"
 	"github.com/veecue/pacman-smartmirror/packet"
 )
@@ -69,7 +70,7 @@ func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
 // GetPacket serves a packet either from the cache or proxies it from a mirror
 // Returns an io.ReadSeaker with access to the packet data
 // If the returned io.ReadSeaker also is an io.Closer, it should be Closed after use.
-func (c *Cache) GetPacket(p *packet.Packet, repo string) (io.ReadSeeker, error) {
+func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (io.ReadSeeker, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
