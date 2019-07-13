@@ -74,14 +74,14 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (io.ReadS
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// first: check if the packet is currently being downloaded
+	// First: check if the packet is currently being downloaded
 	for download := range c.downloads {
 		if download.P == *p {
 			return download.GetReader()
 		}
 	}
 
-	// second: check if the packet already is available in cache
+	// Second: check if the packet already is available in cache
 	for cachedP := range c.packets {
 		if *cachedP == *p {
 			f, err := os.Open(path.Join(c.directory, cachedP.Filename()))
@@ -90,9 +90,17 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (io.ReadS
 			}
 			return f, nil
 		}
+
+		// Bail out if newer package version exists
+		if cachedP.Name == p.Name && cachedP.Arch == p.Arch {
+			versionDiff, err := packet.CompareVersions(p.Version, cachedP.Version)
+			if err == nil && versionDiff < 0 {
+				return nil, errors.New("Newer version available")
+			}
+		}
 	}
 
-	// third: download packet to cache
+	// Third: download packet to cache
 	download, err := c.startDownload(p, repo)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error downloading the packet")
