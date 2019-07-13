@@ -78,7 +78,6 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 			w, err := io.Copy(&countWriter{f, &dl.written}, resp.Body)
 			f.Close()
 
-			// Download done, lock Cache to move around stuff
 			c.mu.Lock()
 			defer c.mu.Unlock()
 
@@ -97,19 +96,7 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 				return
 			}
 
-			// Rename donwloaded file to final filename in cache
-			err = os.Rename(dl.filename, path.Join(c.directory, dl.P.Filename()))
-			if err != nil {
-				log.Println("Failed moving file")
-				os.Remove(dl.filename)
-				delete(c.downloads, dl)
-				return
-			}
-
-			c.packets[&dl.P] = struct{}{}
-			delete(c.downloads, dl)
-
-			log.Println("Packet", dl.P.Filename(), "now available!")
+			go c.finalizeDownload(dl, err)
 		}()
 
 		// Return info about ongoing download so it can be served right away
@@ -117,6 +104,43 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 	}
 
 	return nil, errors.New("Packet could not be downloaded from any mirror")
+}
+
+func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Rename donwloaded file to final filename in cache
+	err = os.Rename(dl.filename, path.Join(c.directory, dl.P.Filename()))
+	if err != nil {
+		log.Println("Failed moving file")
+		os.Remove(dl.filename)
+		delete(c.downloads, dl)
+		return
+	}
+
+	// Remove old versions
+	for p := range c.packets {
+		if p.Name != dl.P.Name || p.Arch != dl.P.Arch {
+			continue
+		}
+
+		diff, err := packet.CompareVersions(p.Version, dl.P.Version)
+		if err != nil {
+			continue
+		}
+
+		if diff < 0 {
+			os.Remove(path.Join(c.directory, p.Filename()))
+			delete(c.packets, p)
+			log.Println("Removed old packet", dl.filename)
+		}
+	}
+
+	c.packets[&dl.P] = struct{}{}
+	delete(c.downloads, dl)
+
+	log.Println("Packet", dl.P.Filename(), "now available!")
 }
 
 type countWriter struct {
