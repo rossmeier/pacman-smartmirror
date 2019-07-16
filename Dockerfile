@@ -5,6 +5,7 @@ COPY go.* ./
 RUN go mod download
 COPY . ./
 RUN go build -o pacman-smartmirror
+RUN CGO_ENABLED=0 go test ./...
 
 FROM alpine:latest  
 RUN apk --no-cache add ca-certificates curl
