@@ -15,12 +15,12 @@ import (
 
 // ongoingDownload stores neccessary information about an ongoing download to use its data or resume it
 type ongoingDownload struct {
+	// force alignment of atomically accessed "written" by putting it at the beginning
+	// of the struct. 32 bit machines crash otherwise.
+	written int64
+
 	P        packet.Packet
 	filesize int64
-
-	// force alignment of atomically accessed "written"
-	_       int32
-	written int64
 
 	filename string
 }
