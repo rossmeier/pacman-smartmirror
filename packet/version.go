@@ -11,7 +11,7 @@ type version struct {
 	rel   string
 }
 
-func getVersion(s string) (v version, err error) {
+func getVersion(s string) (v version) {
 	sp := strings.SplitN(s, ":", 2)
 	if len(sp) == 2 {
 		v.epoch = sp[0]
@@ -27,14 +27,6 @@ func getVersion(s string) (v version, err error) {
 		v.v = sp[0]
 	}
 	return
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-
-	return b
 }
 
 func cmp(a, b int) int {
@@ -141,16 +133,9 @@ func rpmvercmp(a, b string) (ret int) {
 }
 
 // CompareVersions compares the two given packet versions
-func CompareVersions(v1, v2 string) (r int, err error) {
-	a, err := getVersion(v1)
-	if err != nil {
-		return
-	}
-
-	b, err := getVersion(v2)
-	if err != nil {
-		return
-	}
+func CompareVersions(v1, v2 string) (r int) {
+	a := getVersion(v1)
+	b := getVersion(v2)
 
 	r = rpmvercmp(a.epoch, b.epoch)
 	if r != 0 {
@@ -162,5 +147,5 @@ func CompareVersions(v1, v2 string) (r int, err error) {
 		return
 	}
 
-	return rpmvercmp(a.rel, b.rel), nil
+	return rpmvercmp(a.rel, b.rel)
 }

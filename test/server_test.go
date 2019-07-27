@@ -22,7 +22,21 @@ func TestServer(t *testing.T) {
 	u = strings.ReplaceAll(u, "$arch", "x86_64")
 	r, err := http.Get(u + "linux-5.2.arch2-1-x86_64.pkg.tar.xz")
 	assert.NoError(t, err)
+	assert.Equal(t, 200, r.StatusCode)
 	b, err := ioutil.ReadAll(r.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, "heyoo", string(b))
+
+	r, err = http.Get(strings.ReplaceAll(u, "/os/", "/x/") + "linux-5.2.arch2-1-x86_64.pkg.tar.xz")
+	assert.NoError(t, err)
+	assert.Equal(t, 404, r.StatusCode)
+
+	r, err = http.Get(u + "a/linux-5.2.arch2-1-x86_64.pkg.tar.xz")
+	assert.NoError(t, err)
+	assert.Equal(t, 404, r.StatusCode)
+
+	// This may change in the future
+	r, err = http.Get(u + "extra.db")
+	assert.NoError(t, err)
+	assert.Equal(t, 404, r.StatusCode)
 }

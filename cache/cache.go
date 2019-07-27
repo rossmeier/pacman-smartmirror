@@ -37,6 +37,7 @@ func (c *Cache) init() error {
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), ".part") {
 			os.Remove(path.Join(c.directory, file.Name()))
+			continue
 		}
 
 		p, err := packet.FromFilename(file.Name())
@@ -93,8 +94,8 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (io.ReadS
 
 		// Bail out if newer package version exists
 		if cachedP.Name == p.Name && cachedP.Arch == p.Arch {
-			versionDiff, err := packet.CompareVersions(p.Version, cachedP.Version)
-			if err == nil && versionDiff < 0 {
+			versionDiff := packet.CompareVersions(p.Version, cachedP.Version)
+			if versionDiff < 0 {
 				return nil, errors.New("Newer version available")
 			}
 		}

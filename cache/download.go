@@ -125,11 +125,7 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 			continue
 		}
 
-		diff, err := packet.CompareVersions(p.Version, dl.P.Version)
-		if err != nil {
-			continue
-		}
-
+		diff := packet.CompareVersions(p.Version, dl.P.Version)
 		if diff < 0 {
 			os.Remove(path.Join(c.directory, p.Filename()))
 			delete(c.packets, p)

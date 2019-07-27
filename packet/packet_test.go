@@ -12,3 +12,9 @@ func TestFilename(t *testing.T) {
 	assert.NoError(t, err, "Error while parsing filename: %v", err)
 	assert.Equal(t, filename, packet.Filename())
 }
+
+func TestInvalidFilename(t *testing.T) {
+	const filename = "linux.pkg.tar.xz"
+	_, err := FromFilename(filename)
+	assert.Error(t, err)
+}

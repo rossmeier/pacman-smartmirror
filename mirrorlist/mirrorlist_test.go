@@ -1,6 +1,9 @@
 package mirrorlist
 
 import (
+	"io"
+	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -39,8 +42,33 @@ func TestMirrorlistGood(t *testing.T) {
 	)
 }
 
+type eReader struct{}
+
+func (eReader) Read(b []byte) (int, error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
 func TestMirrorlistBad(t *testing.T) {
 	m, err := FromReader(strings.NewReader(mirrorlistBad))
 	assert.Error(t, err)
 	assert.Nil(t, m)
+
+	_, err = FromReader(eReader{})
+	assert.Error(t, err)
+}
+
+func TestMirrorlistFile(t *testing.T) {
+	_, err := FromFile("/path/to/non/existant/file")
+	assert.Error(t, err)
+	f, err := ioutil.TempFile("", "pacman-smartmirror-mirrorlist")
+	defer func() {
+		f.Close()
+		assert.NoError(t, os.Remove(f.Name()))
+	}()
+	assert.NoError(t, err)
+	_, err = io.WriteString(f, mirrorlistGood)
+	assert.NoError(t, err)
+	m, err := FromFile(f.Name())
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(m))
 }
