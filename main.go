@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/veecue/pacman-smartmirror/cache"
-	"github.com/veecue/pacman-smartmirror/database"
 	"github.com/veecue/pacman-smartmirror/mirrorlist"
 	"github.com/veecue/pacman-smartmirror/server"
 )
@@ -18,8 +17,6 @@ var (
 )
 
 func main() {
-
-	database.DbScratch()
 
 	flag.Parse()
 	m, err := mirrorlist.FromFile(*mirrorlistFile)

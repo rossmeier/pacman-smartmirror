@@ -3,10 +3,9 @@ package database
 import (
 	"bufio"
 	"compress/gzip"
-	"fmt"
 	"io"
-	"log"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -34,40 +33,181 @@ type DatabaseEntry struct {
 	Replaces    string
 	Conflicts   string
 	Provides    string
-	Dependes    string
+	Depends     string
 	MakeDepends string
 }
 
-func DbScratch() error {
-	file, err := os.Open("core.db")
-	if err != nil {
-		return errors.Wrap(err, "Error reading file")
-	}
+const (
+	none = iota
+	name
+	base
+	version
+	desc
+	cSize
+	iSize
+	mD5Sum
+	pGPSig
+	uRL
+	license
+	arch
+	buildDate
+	packager
+	replaces
+	conflicts
+	provides
+	depends
+	makeDepends
+)
 
-	zr, err := gzip.NewReader(file)
+// DbScratchFromFile reads a pacman .db file and creats a []DatabaseEntry directly from File
+func DbScratchFromFile(filename string) ([]DatabaseEntry, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error reading file")
+	}
+	defer file.Close()
+
+	return DbScratchFromReader(file)
+}
+
+func DbScratchFromReader(r io.Reader) ([]DatabaseEntry, error) {
+	zr, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error gunzipping file")
+	}
 	defer zr.Close()
 
-	fmt.Printf("Name: %s\nComment: %s\nModTime: %s\n\n", zr.Name, zr.Comment, zr.ModTime.UTC())
+	return DbScratchFromGUnzippedReader(zr)
+}
 
-	reader := bufio.NewReader(zr)
+// DbScratchFromGZipReader reads a pacman .db file and creats a []DatabaseEntry
+func DbScratchFromGUnzippedReader(r io.Reader) ([]DatabaseEntry, error) {
+
+	readDb := make([]DatabaseEntry, 0)
+
+	reader := bufio.NewReader(r)
+	var current DatabaseEntry
+	state := none
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			return errors.Wrap(err, "Error reading mirrorlist!")
+			return nil, errors.Wrap(err, "Error reading mirrorlist!")
 		}
 
-		if line == "%URL%\n" {
-			fmt.Println(line)
+		switch state {
+		case none:
+			{
+				line = strings.TrimPrefix(strings.TrimSuffix(line, "%\n"), "%")
+
+				switch line {
+				case "NAME":
+					state = name
+				case "BASE":
+					state = base
+				case "VERSION":
+					state = version
+				case "DESC":
+					state = desc
+				case "CSIZE":
+					state = cSize
+				case "ISIZE":
+					state = iSize
+				case "MD5SUM":
+					state = mD5Sum
+				case "PGPSIG":
+					state = pGPSig
+				case "URL":
+					state = uRL
+				case "LICENSE":
+					state = license
+				case "ARCH":
+					state = arch
+				case "BUILDDATE":
+					state = buildDate
+				case "PACKAGER":
+					state = packager
+				case "REPLACES":
+					state = replaces
+				case "CONFLICTS":
+					state = conflicts
+				case "PROVIDES":
+					state = provides
+				case "DEPENDS":
+					state = depends
+				case "MAKEDEPENDS":
+					state = makeDepends
+				}
+			}
+		case name:
+
+			// append old, initalize new entry
+			if current.Name != "" {
+				readDb = append(readDb, current)
+			}
+			current = DatabaseEntry{}
+
+			current.Name = strings.TrimSuffix(line, "\n")
+			state = none
+		case base:
+			current.Base = strings.TrimSuffix(line, "\n")
+			state = none
+		case version:
+			current.Version = strings.TrimSuffix(line, "\n")
+			state = none
+		case desc:
+			current.Desc = strings.TrimSuffix(line, "\n")
+			state = none
+		case cSize:
+			current.CSize = strings.TrimSuffix(line, "\n")
+			state = none
+		case iSize:
+			current.ISize = strings.TrimSuffix(line, "\n")
+			state = none
+		case mD5Sum:
+			current.MD5Sum = strings.TrimSuffix(line, "\n")
+			state = none
+		case pGPSig:
+			current.PGPSig = strings.TrimSuffix(line, "\n")
+			state = none
+		case uRL:
+			current.URL = strings.TrimSuffix(line, "\n")
+			state = none
+		case license:
+			current.License = strings.TrimSuffix(line, "\n")
+			state = none
+		case arch:
+			current.Arch = strings.TrimSuffix(line, "\n")
+			state = none
+		case buildDate:
+			current.BuildDate = strings.TrimSuffix(line, "\n")
+			state = none
+		case packager:
+			current.Packager = strings.TrimSuffix(line, "\n")
+			state = none
+		case replaces:
+			current.Replaces = strings.TrimSuffix(line, "\n")
+			state = none
+		case conflicts:
+			current.Conflicts = strings.TrimSuffix(line, "\n")
+			state = none
+		case provides:
+			current.Provides = strings.TrimSuffix(line, "\n")
+			state = none
+		case depends:
+			current.Depends = strings.TrimSuffix(line, "\n")
+			state = none
+		case makeDepends:
+			current.MakeDepends = strings.TrimSuffix(line, "\n")
+			state = none
 		}
-
 	}
 
-	if err := zr.Close(); err != nil {
-		log.Fatal(err)
+	if current.Name != "" {
+		readDb = append(readDb, current)
 	}
 
-	return nil
+	return readDb, nil
 }
