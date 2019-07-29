@@ -6,34 +6,29 @@ import (
 	"net/http"
 
 	"github.com/veecue/pacman-smartmirror/cache"
+	"github.com/veecue/pacman-smartmirror/config"
 	"github.com/veecue/pacman-smartmirror/mirrorlist"
 	"github.com/veecue/pacman-smartmirror/server"
 )
 
-var (
-	cacheDirectory = flag.String("d", "", "Directory to use for the cached packages")
-	mirrorlistFile = flag.String("m", "", "Filename of the mirrorlist to use")
-	listen         = flag.String("l", ":41234", "Address and port for the HTTP server to listen on")
-)
-
 func main() {
 	flag.Parse()
-	log.Printf(`Loading mirrorlist file: "%s"`, *mirrorlistFile)
-	m, err := mirrorlist.FromFile(*mirrorlistFile)
+	log.Printf(`Loading mirrorlist file: "%s"`, config.C.MirrorlistFile)
+	m, err := mirrorlist.FromFile(config.C.MirrorlistFile)
 	if err != nil {
-		log.Fatalf(`Error reading mirrorlist "%s": %v`, *mirrorlistFile, err)
+		log.Fatalf(`Error reading mirrorlist "%s": %v`, config.C.MirrorlistFile, err)
 	}
 
-	log.Printf(`Initing package cache in "%s"`, *cacheDirectory)
-	c, err := cache.New(*cacheDirectory, m)
+	log.Printf(`Initing package cache in "%s"`, config.C.CacheDirectory)
+	c, err := cache.New(config.C.CacheDirectory, m)
 	if err != nil {
-		log.Fatalf(`Error initing cache "%s": %v`, *cacheDirectory, err)
+		log.Fatalf(`Error initing cache "%s": %v`, config.C.CacheDirectory, err)
 	}
 
 	s := server.New(c)
-	log.Println("Listening on", *listen)
-	err = http.ListenAndServe(*listen, s)
+	log.Println("Listening on", config.C.Listen)
+	err = http.ListenAndServe(config.C.Listen, s)
 	if err != nil {
-		log.Fatalf("Error listening on %s: %v", *listen, err)
+		log.Fatalf("Error listening on %s: %v", config.C.Listen, err)
 	}
 }
