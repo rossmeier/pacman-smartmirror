@@ -69,7 +69,7 @@ func TestSimple(t *testing.T) {
 	c, err := New(dir, mirrorlist.Mirrorlist{mirrorlist.Mirror(s.URL)})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(c.packets), "Wrong packet number (packets: %v)", c.packets)
-	for p := range c.packets {
+	for _, p := range c.packets {
 		assert.Equal(t, existing, p.Filename())
 	}
 	_, err = os.Stat(path.Join(dir, part))
