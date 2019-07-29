@@ -71,7 +71,7 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 		}
 
 		// store this download to the currently ongoing downloads
-		c.downloads[dl] = struct{}{}
+		c.downloads[dl.P.Filename()] = dl
 
 		// do actual download in the background
 		go func() {
@@ -85,14 +85,14 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 			if err != nil {
 				log.Println("Error downloading to local cache:", err)
 				os.Remove(dl.filename)
-				delete(c.downloads, dl)
+				delete(c.downloads, dl.P.Filename())
 				return
 			}
 
 			if w < dl.filesize {
 				log.Println("Too few bytes read while downloading to cache")
 				os.Remove(dl.filename)
-				delete(c.downloads, dl)
+				delete(c.downloads, dl.P.Filename())
 				return
 			}
 
@@ -115,26 +115,22 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 	if err != nil {
 		log.Println("Failed moving file")
 		os.Remove(dl.filename)
-		delete(c.downloads, dl)
+		delete(c.downloads, dl.P.Filename())
 		return
 	}
 
 	// Remove old versions
-	for p := range c.packets {
-		if p.Name != dl.P.Name || p.Arch != dl.P.Arch {
-			continue
-		}
-
+	for _, p := range c.packets.FindOtherVersions(&dl.P) {
 		diff := packet.CompareVersions(p.Version, dl.P.Version)
 		if diff < 0 {
 			os.Remove(path.Join(c.directory, p.Filename()))
-			delete(c.packets, p)
-			log.Println("Removed old packet", dl.filename)
+			c.packets.Delete(p.Filename())
+			log.Println("Removed old packet", dl.P.Filename())
 		}
 	}
 
-	c.packets[&dl.P] = struct{}{}
-	delete(c.downloads, dl)
+	c.packets.Insert(&dl.P)
+	delete(c.downloads, dl.P.Filename())
 
 	log.Println("Packet", dl.P.Filename(), "now available!")
 }

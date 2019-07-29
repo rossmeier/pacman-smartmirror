@@ -20,8 +20,8 @@ import (
 type Cache struct {
 	directory string
 	mirrors   mirrorlist.Mirrorlist
-	packets   map[*packet.Packet]struct{}
-	downloads map[*ongoingDownload]struct{}
+	packets   packet.Set
+	downloads map[string]*ongoingDownload
 	mu        sync.Mutex
 }
 
@@ -45,7 +45,7 @@ func (c *Cache) init() error {
 			return errors.Wrapf(err, "Invalid packet in directory")
 		}
 
-		c.packets[p] = struct{}{}
+		c.packets.Insert(p)
 	}
 
 	return nil
@@ -55,9 +55,9 @@ func (c *Cache) init() error {
 func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
 	c := &Cache{
 		directory: directory,
-		packets:   make(map[*packet.Packet]struct{}),
+		packets:   make(packet.Set),
 		mirrors:   mirrors,
-		downloads: make(map[*ongoingDownload]struct{}),
+		downloads: make(map[string]*ongoingDownload),
 	}
 
 	err := c.init()
@@ -76,28 +76,25 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (io.ReadS
 	defer c.mu.Unlock()
 
 	// First: check if the packet is currently being downloaded
-	for download := range c.downloads {
-		if download.P == *p {
-			return download.GetReader()
-		}
+	if download, ok := c.downloads[p.Filename()]; ok && download.P == *p {
+		return download.GetReader()
 	}
 
 	// Second: check if the packet already is available in cache
-	for cachedP := range c.packets {
-		if *cachedP == *p {
-			f, err := os.Open(path.Join(c.directory, cachedP.Filename()))
-			if err != nil {
-				return nil, errors.Wrap(err, "Error opening cached packet file")
-			}
-			return f, nil
+	if cachedP := c.packets.ByFilename(p.Filename()); cachedP != nil {
+		f, err := os.Open(path.Join(c.directory, cachedP.Filename()))
+		if err != nil {
+			return nil, errors.Wrap(err, "Error opening cached packet file")
 		}
 
-		// Bail out if newer package version exists
-		if cachedP.Name == p.Name && cachedP.Arch == p.Arch {
-			versionDiff := packet.CompareVersions(p.Version, cachedP.Version)
-			if versionDiff < 0 {
-				return nil, errors.New("Newer version available")
-			}
+		return f, nil
+	}
+
+	// Bail out if newer package version exists
+	for _, cachedP := range c.packets.FindOtherVersions(p) {
+		versionDiff := packet.CompareVersions(p.Version, cachedP.Version)
+		if versionDiff < 0 {
+			return nil, errors.New("Newer version available")
 		}
 	}
 
