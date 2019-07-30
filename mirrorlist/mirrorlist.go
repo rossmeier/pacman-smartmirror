@@ -75,3 +75,11 @@ func (m Mirror) PacketURL(p *packet.Packet, repo *database.Repository) string {
 	r = strings.TrimSuffix(r, "/")
 	return r + "/" + p.Filename()
 }
+
+// RepoURL returns the actual URL of a given repo db
+func (m Mirror) RepoURL(repo *database.Repository) string {
+	r := strings.ReplaceAll(string(m), "$repo", repo.Name)
+	r = strings.ReplaceAll(r, "$arch", repo.Arch)
+	r = strings.TrimSuffix(r, "/")
+	return r + "/" + repo.Name + ".db"
+}

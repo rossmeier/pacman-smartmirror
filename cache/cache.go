@@ -18,14 +18,17 @@ import (
 // The currently only implementation at the moment is storing
 // it in a directory in the filesystem.
 type Cache struct {
-	directory string
-	mirrors   mirrorlist.Mirrorlist
-	packets   packet.Set
-	downloads map[string]*ongoingDownload
-	mu        sync.Mutex
+	directory     string
+	mirrors       mirrorlist.Mirrorlist
+	packets       packet.Set
+	downloads     map[string]*ongoingDownload
+	repos         map[database.Repository]struct{}
+	repoDownloads map[database.Repository]struct{}
+	mu            sync.Mutex
+	repoMu        sync.Mutex
 }
 
-func (c *Cache) init() error {
+func (c *Cache) initPackets() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -35,6 +38,10 @@ func (c *Cache) init() error {
 	}
 
 	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
 		if strings.HasSuffix(file.Name(), ".part") {
 			os.Remove(path.Join(c.directory, file.Name()))
 			continue
@@ -54,13 +61,20 @@ func (c *Cache) init() error {
 // New creates a new cache from a given directory
 func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
 	c := &Cache{
-		directory: directory,
-		packets:   make(packet.Set),
-		mirrors:   mirrors,
-		downloads: make(map[string]*ongoingDownload),
+		directory:     directory,
+		packets:       make(packet.Set),
+		mirrors:       mirrors,
+		downloads:     make(map[string]*ongoingDownload),
+		repos:         make(map[database.Repository]struct{}),
+		repoDownloads: make(map[database.Repository]struct{}),
 	}
 
-	err := c.init()
+	err := c.initPackets()
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.initRepos()
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +88,9 @@ func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
 func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (io.ReadSeeker, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Download the packet's repo in the backround if we don't have it yet
+	go c.downloadRepo(repo)
 
 	// First: check if the packet is currently being downloaded
 	if download, ok := c.downloads[p.Filename()]; ok && download.P == *p {

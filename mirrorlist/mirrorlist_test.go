@@ -40,6 +40,13 @@ func TestMirrorlistGood(t *testing.T) {
 			Arch: "x86_64",
 		})),
 	)
+	assert.Equal(t,
+		"http://mirrors.arnoldthebat.co.uk/archlinux/community/os/x86_64/community.db",
+		m[1].RepoURL(&database.Repository{
+			Name: "community",
+			Arch: "x86_64",
+		}),
+	)
 }
 
 type eReader struct{}
