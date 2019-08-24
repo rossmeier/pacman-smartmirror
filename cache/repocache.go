@@ -121,7 +121,7 @@ func (c *Cache) initRepos() error {
 }
 
 // GetDBFile serves the latest cached version of a given database
-func (c *Cache) GetDBFile(repo *database.Repository) (io.ReadSeeker, error) {
+func (c *Cache) GetDBFile(repo *database.Repository) (ReadSeekCloser, error) {
 	if _, ok := c.repos[*repo]; ok {
 		c.repoMu.Lock()
 		defer c.repoMu.Unlock()

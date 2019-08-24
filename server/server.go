@@ -1,7 +1,6 @@
 package server
 
 import (
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -67,11 +66,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		defer func() {
-			if c, ok := reader.(io.Closer); ok {
-				c.Close()
-			}
-		}()
+		defer reader.Close()
 		http.ServeContent(w, r, filename, time.Time{}, reader)
 		return
 	}
@@ -88,9 +83,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defer reader.Close()
 	http.ServeContent(w, r, filename, time.Time{}, reader)
-
-	if closer, ok := reader.(io.Closer); ok {
-		closer.Close()
-	}
 }
