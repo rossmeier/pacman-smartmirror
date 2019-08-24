@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const fileGood = `
+const fileGood = `acl-2.2.53-1/someweird non chars%FILENAME%
+acl-2.2.53-1-x86_64.pkg.tar.xz
+
 %NAME%
 acl
 
@@ -67,6 +69,7 @@ func TestFilename(t *testing.T) {
 	database, err := DbScratchFromGUnzippedReader(strings.NewReader(fileGood))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(database))
+	assert.Equal(t, "acl-2.2.53-1-x86_64.pkg.tar.xz", database[0].Filename)
 	assert.Equal(t, "acl", database[0].Name)
 	assert.Equal(t, "acl", database[0].Base)
 	assert.Equal(t, "2.2.53-1", database[0].Version)

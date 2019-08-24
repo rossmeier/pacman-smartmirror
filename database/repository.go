@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -17,6 +18,7 @@ type Repository struct {
 }
 
 type DatabaseEntry struct {
+	Filename    string
 	Name        string
 	Base        string
 	Version     string
@@ -39,6 +41,7 @@ type DatabaseEntry struct {
 
 const (
 	none = iota
+	filename
 	name
 	base
 	version
@@ -86,6 +89,7 @@ func DbScratchFromGUnzippedReader(r io.Reader) ([]DatabaseEntry, error) {
 	readDb := make([]DatabaseEntry, 0)
 
 	reader := bufio.NewReader(r)
+	categoryRegex := regexp.MustCompile(`(?m)%[0-9A-Z]*%\n`)
 	var current DatabaseEntry
 	state := none
 	for {
@@ -100,9 +104,15 @@ func DbScratchFromGUnzippedReader(r io.Reader) ([]DatabaseEntry, error) {
 		switch state {
 		case none:
 			{
-				line = strings.TrimPrefix(strings.TrimSuffix(line, "%\n"), "%")
+				line = strings.TrimPrefix(strings.TrimSuffix(categoryRegex.FindString(line), "%\n"), "%")
+
+				if len(line) == 0 {
+					continue
+				}
 
 				switch line {
+				case "FILENAME":
+					state = filename
 				case "NAME":
 					state = name
 				case "BASE":
@@ -141,14 +151,16 @@ func DbScratchFromGUnzippedReader(r io.Reader) ([]DatabaseEntry, error) {
 					state = makeDepends
 				}
 			}
-		case name:
-
+		case filename:
 			// append old, initalize new entry
-			if current.Name != "" {
+			if current.Filename != "" {
 				readDb = append(readDb, current)
 			}
 			current = DatabaseEntry{}
 
+			current.Filename = strings.TrimSuffix(line, "\n")
+			state = none
+		case name:
 			current.Name = strings.TrimSuffix(line, "\n")
 			state = none
 		case base:
@@ -205,7 +217,7 @@ func DbScratchFromGUnzippedReader(r io.Reader) ([]DatabaseEntry, error) {
 		}
 	}
 
-	if current.Name != "" {
+	if current.Filename != "" {
 		readDb = append(readDb, current)
 	}
 
