@@ -27,7 +27,7 @@ type ongoingDownload struct {
 
 // GetReader returns a ReadSeeker that will read the already downloaded content from the file
 // and wait for any undownloaded content (for serving to the client)
-func (dl *ongoingDownload) GetReader() (io.ReadSeeker, error) {
+func (dl *ongoingDownload) GetReader() (ReadSeekCloser, error) {
 	r, err := os.Open(dl.filename)
 	if err != nil {
 		return nil, err

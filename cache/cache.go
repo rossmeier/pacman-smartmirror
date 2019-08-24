@@ -28,6 +28,12 @@ type Cache struct {
 	repoMu        sync.Mutex
 }
 
+// ReadSeekCloser implements io.ReadSeeker and io.Closer
+type ReadSeekCloser interface {
+	io.ReadSeeker
+	io.Closer
+}
+
 func (c *Cache) initPackets() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -84,8 +90,7 @@ func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
 
 // GetPacket serves a packet either from the cache or proxies it from a mirror
 // Returns an io.ReadSeaker with access to the packet data
-// If the returned io.ReadSeaker also is an io.Closer, it should be Closed after use.
-func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (io.ReadSeeker, error) {
+func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeekCloser, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
