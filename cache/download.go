@@ -19,10 +19,22 @@ type ongoingDownload struct {
 	// of the struct. 32 bit machines crash otherwise.
 	written int64
 
-	P        packet.Packet
+	Dl       download
 	filesize int64
 
 	filename string
+}
+
+type download struct {
+	P    packet.Packet
+	R    database.Repository
+	Chan chan<- error
+}
+
+func (d *download) Callback(err error) {
+	if d.Chan != nil {
+		d.Chan <- err
+	}
 }
 
 // GetReader returns a ReadSeeker that will read the already downloaded content from the file
@@ -43,9 +55,11 @@ func (dl *ongoingDownload) GetReader() (ReadSeekCloser, error) {
 // background and add it to the cache once finished.
 //
 // Returns info about the ongoing download so it can be served to the client.
-func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ongoingDownload, error) {
+// When the returned error is nil, the channel will receive a follow-up error (can be nil)
+// exactly once
+func (c *Cache) startDownload(d *download) (*ongoingDownload, error) {
 	for _, mirror := range c.mirrors {
-		req, _ := http.NewRequest("GET", mirror.PacketURL(p, repo), nil)
+		req, _ := http.NewRequest("GET", mirror.PacketURL(&d.P, &d.R), nil)
 		req.Header.Set("User-Agent", "pacman-smartmirror/0.0")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -59,9 +73,9 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 
 		// seems to work, use this mirror
 		dl := &ongoingDownload{
-			P:        *p,
+			Dl:       *d,
 			filesize: resp.ContentLength,
-			filename: path.Join(c.directory, p.Filename()+".part"),
+			filename: path.Join(c.directory, d.P.Filename()+".part"),
 		}
 
 		// create the temporary file to store the download
@@ -71,7 +85,7 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 		}
 
 		// store this download to the currently ongoing downloads
-		c.downloads[dl.P.Filename()] = dl
+		c.downloads[dl.Dl.P.Filename()] = dl
 
 		// do actual download in the background
 		go func() {
@@ -83,16 +97,20 @@ func (c *Cache) startDownload(p *packet.Packet, repo *database.Repository) (*ong
 
 			//TODO: better error handling (#9)
 			if err != nil {
-				log.Println("Error downloading to local cache:", err)
+				err = errors.Wrap(err, "Error downloading to local cache")
+				log.Println(err)
 				os.Remove(dl.filename)
-				delete(c.downloads, dl.P.Filename())
+				delete(c.downloads, dl.Dl.P.Filename())
+				dl.Dl.Callback(err)
 				return
 			}
 
 			if w < dl.filesize {
-				log.Println("Too few bytes read while downloading to cache")
+				err = errors.New("Too few bytes read while downloading to cache")
+				log.Println(err)
 				os.Remove(dl.filename)
-				delete(c.downloads, dl.P.Filename())
+				delete(c.downloads, dl.Dl.P.Filename())
+				dl.Dl.Callback(err)
 				return
 			}
 
@@ -111,28 +129,31 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 	defer c.mu.Unlock()
 
 	// Rename donwloaded file to final filename in cache
-	err = os.Rename(dl.filename, path.Join(c.directory, dl.P.Filename()))
+	err = os.Rename(dl.filename, path.Join(c.directory, dl.Dl.P.Filename()))
 	if err != nil {
-		log.Println("Failed moving file")
+		err = errors.Wrap(err, "Failed moving file")
+		log.Println(err)
 		os.Remove(dl.filename)
-		delete(c.downloads, dl.P.Filename())
+		delete(c.downloads, dl.Dl.P.Filename())
+		dl.Dl.Callback(err)
 		return
 	}
 
 	// Remove old versions
-	for _, p := range c.packets.FindOtherVersions(&dl.P) {
-		diff := packet.CompareVersions(p.Version, dl.P.Version)
+	for _, p := range c.packets.FindOtherVersions(&dl.Dl.P) {
+		diff := packet.CompareVersions(p.Version, dl.Dl.P.Version)
 		if diff < 0 {
 			os.Remove(path.Join(c.directory, p.Filename()))
 			c.packets.Delete(p.Filename())
-			log.Println("Removed old packet", dl.P.Filename())
+			log.Println("Removed old packet", dl.Dl.P.Filename())
 		}
 	}
 
-	c.packets.Insert(&dl.P)
-	delete(c.downloads, dl.P.Filename())
+	c.packets.Insert(&dl.Dl.P)
+	delete(c.downloads, dl.Dl.P.Filename())
 
-	log.Println("Packet", dl.P.Filename(), "now available!")
+	log.Println("Packet", dl.Dl.P.Filename(), "now available!")
+	dl.Dl.Callback(nil)
 }
 
 type countWriter struct {
