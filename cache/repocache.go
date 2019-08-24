@@ -119,3 +119,48 @@ func (c *Cache) initRepos() error {
 		return err
 	})
 }
+
+// GetDBFile serves the latest cached version of a given database
+func (c *Cache) GetDBFile(repo *database.Repository) (io.ReadSeeker, error) {
+	if _, ok := c.repos[*repo]; ok {
+		c.repoMu.Lock()
+		defer c.repoMu.Unlock()
+
+		path := filepath.Join(c.directory, repo.Arch, repo.Name+".db")
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, errors.Wrap(err, "Error opening repository file")
+		}
+
+		return file, nil
+	}
+
+	return nil, errors.New("Database file not found")
+}
+
+// ProxyRepo will proxy the given repository database file from a mirror
+func (c *Cache) ProxyRepo(w http.ResponseWriter, r *http.Request, repo *database.Repository) {
+	for _, mirror := range c.mirrors {
+		req, _ := http.NewRequest("GET", mirror.RepoURL(repo), nil)
+		req.Header = r.Header
+		req.Header.Set("User-Agent", "pacman-smartmirror/0.0")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode != 200 && resp.StatusCode != 304 {
+			continue
+		}
+
+		// seems to work, use this mirror
+		for key := range resp.Header {
+			w.Header().Add(key, resp.Header.Get(key))
+		}
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+		return
+	}
+
+	http.NotFound(w, r)
+}

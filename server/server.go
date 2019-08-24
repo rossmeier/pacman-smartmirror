@@ -55,8 +55,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	filename := parts[4]
 
 	if strings.HasSuffix(filename, ".db") {
-		// Ignore database files for now, maybe in the future
-		http.NotFound(w, r)
+		if repo.Name != strings.TrimSuffix(filename, ".db") {
+			http.NotFound(w, r)
+			return
+		}
+
+		reader, err := s.packetCache.GetDBFile(repo)
+		if err != nil {
+			// Proxy database directly from mirror if not in cache
+			s.packetCache.ProxyRepo(w, r, repo)
+			return
+		}
+
+		defer func() {
+			if c, ok := reader.(io.Closer); ok {
+				c.Close()
+			}
+		}()
+		http.ServeContent(w, r, filename, time.Time{}, reader)
 		return
 	}
 
