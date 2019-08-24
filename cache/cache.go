@@ -98,7 +98,7 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeek
 	go c.downloadRepo(repo)
 
 	// First: check if the packet is currently being downloaded
-	if download, ok := c.downloads[p.Filename()]; ok && download.P == *p {
+	if download, ok := c.downloads[p.Filename()]; ok && download.Dl.P == *p {
 		return download.GetReader()
 	}
 
@@ -121,7 +121,7 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeek
 	}
 
 	// Third: download packet to cache
-	download, err := c.startDownload(p, repo)
+	download, err := c.startDownload(&download{*p, *repo, nil})
 	if err != nil {
 		return nil, errors.Wrap(err, "Error downloading the packet")
 	}
