@@ -1,14 +1,14 @@
 package database
 
 import (
-	"bufio"
+	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"io"
 	"os"
-	"regexp"
-	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/veecue/pacman-smartmirror/packet"
 )
 
 // Repository describes a Repo as found on an upstream server
@@ -17,209 +17,87 @@ type Repository struct {
 	Arch string
 }
 
-type DatabaseEntry struct {
-	Filename    string
-	Name        string
-	Base        string
-	Version     string
-	Desc        string
-	CSize       string
-	ISize       string
-	MD5Sum      string
-	PGPSig      string
-	URL         string
-	License     string
-	Arch        string
-	BuildDate   string
-	Packager    string
-	Replaces    string
-	Conflicts   string
-	Provides    string
-	Depends     string
-	MakeDepends string
-}
-
-const (
-	none = iota
-	filename
-	name
-	base
-	version
-	desc
-	cSize
-	iSize
-	mD5Sum
-	pGPSig
-	uRL
-	license
-	arch
-	buildDate
-	packager
-	replaces
-	conflicts
-	provides
-	depends
-	makeDepends
-)
-
-// DbScratchFromFile reads a pacman .db file and creats a []DatabaseEntry directly from File
-func DbScratchFromFile(filename string) ([]DatabaseEntry, error) {
+// ParseDBFromFile reads a pacman .db file and creats a []packet.Packet directly from File
+func ParseDBFromFile(filename string) ([]packet.Packet, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error reading file")
 	}
 	defer file.Close()
 
-	return DbScratchFromReader(file)
+	return ParseDB(file)
 }
 
-func DbScratchFromReader(r io.Reader) ([]DatabaseEntry, error) {
+// ParseDB reads a pacman .db file and creats a []packet.Packet
+func ParseDB(r io.Reader) ([]packet.Packet, error) {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error gunzipping file")
 	}
 	defer zr.Close()
 
-	return DbScratchFromGUnzippedReader(zr)
+	return ParseDBgunzipped(zr)
 }
 
-// DbScratchFromGZipReader reads a pacman .db file and creats a []DatabaseEntry
-func DbScratchFromGUnzippedReader(r io.Reader) ([]DatabaseEntry, error) {
+// ParseDBCBFromFile provides a callback for ParseDBFromFile
+func ParseDBCBFromFile(filename string, callback func([]packet.Packet)) {
+	packets, err := ParseDBFromFile(filename)
+	if err != nil {
+		callback(packets)
+	} else {
+		callback(nil)
+	}
+}
 
-	readDb := make([]DatabaseEntry, 0)
+// ParseDBCB provides a callback for ParseDB
+func ParseDBCB(r io.Reader, callback func([]packet.Packet)) {
+	packets, err := ParseDB(r)
+	if err != nil {
+		callback(packets)
+	} else {
+		callback(nil)
+	}
+}
 
-	reader := bufio.NewReader(r)
-	categoryRegex := regexp.MustCompile(`(?m)%[0-9A-Z]*%\n`)
-	var current DatabaseEntry
-	state := none
+// ParseDBgunzipped reads a pacman .db file and creats a []DatabaseEntry
+func ParseDBgunzipped(r io.Reader) ([]packet.Packet, error) {
+
+	readDb := make([]packet.Packet, 0)
+
+	buf := &bytes.Buffer{}
+	reader := tar.NewReader(r)
 	for {
-		line, err := reader.ReadString('\n')
+		pkg, err := reader.Next()
+		if err == io.EOF {
+			return readDb, nil
+		}
 		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, errors.Wrap(err, "Error reading mirrorlist!")
+			return nil, errors.New("Error while reading tar (DbScratch)")
+		}
+		if pkg.FileInfo().IsDir() {
+			continue
+		}
+		io.Copy(buf, reader)
+		str, err := buf.ReadString('\n')
+		if err != nil {
+			panic(err)
+		}
+		if str != "%FILENAME%\n" {
+			panic("Invalid filename designator: " + str)
+		}
+		filename, err := buf.ReadString('\n')
+		if err != nil {
+			panic(err)
+		}
+		p, err := packet.FromFilename(filename)
+		if err != nil {
+			panic(err)
 		}
 
-		switch state {
-		case none:
-			{
-				line = strings.TrimPrefix(strings.TrimSuffix(categoryRegex.FindString(line), "%\n"), "%")
+		readDb = append(readDb, *p)
 
-				if len(line) == 0 {
-					continue
-				}
-
-				switch line {
-				case "FILENAME":
-					state = filename
-				case "NAME":
-					state = name
-				case "BASE":
-					state = base
-				case "VERSION":
-					state = version
-				case "DESC":
-					state = desc
-				case "CSIZE":
-					state = cSize
-				case "ISIZE":
-					state = iSize
-				case "MD5SUM":
-					state = mD5Sum
-				case "PGPSIG":
-					state = pGPSig
-				case "URL":
-					state = uRL
-				case "LICENSE":
-					state = license
-				case "ARCH":
-					state = arch
-				case "BUILDDATE":
-					state = buildDate
-				case "PACKAGER":
-					state = packager
-				case "REPLACES":
-					state = replaces
-				case "CONFLICTS":
-					state = conflicts
-				case "PROVIDES":
-					state = provides
-				case "DEPENDS":
-					state = depends
-				case "MAKEDEPENDS":
-					state = makeDepends
-				}
-			}
-		case filename:
-			// append old, initalize new entry
-			if current.Filename != "" {
-				readDb = append(readDb, current)
-			}
-			current = DatabaseEntry{}
-
-			current.Filename = strings.TrimSuffix(line, "\n")
-			state = none
-		case name:
-			current.Name = strings.TrimSuffix(line, "\n")
-			state = none
-		case base:
-			current.Base = strings.TrimSuffix(line, "\n")
-			state = none
-		case version:
-			current.Version = strings.TrimSuffix(line, "\n")
-			state = none
-		case desc:
-			current.Desc = strings.TrimSuffix(line, "\n")
-			state = none
-		case cSize:
-			current.CSize = strings.TrimSuffix(line, "\n")
-			state = none
-		case iSize:
-			current.ISize = strings.TrimSuffix(line, "\n")
-			state = none
-		case mD5Sum:
-			current.MD5Sum = strings.TrimSuffix(line, "\n")
-			state = none
-		case pGPSig:
-			current.PGPSig = strings.TrimSuffix(line, "\n")
-			state = none
-		case uRL:
-			current.URL = strings.TrimSuffix(line, "\n")
-			state = none
-		case license:
-			current.License = strings.TrimSuffix(line, "\n")
-			state = none
-		case arch:
-			current.Arch = strings.TrimSuffix(line, "\n")
-			state = none
-		case buildDate:
-			current.BuildDate = strings.TrimSuffix(line, "\n")
-			state = none
-		case packager:
-			current.Packager = strings.TrimSuffix(line, "\n")
-			state = none
-		case replaces:
-			current.Replaces = strings.TrimSuffix(line, "\n")
-			state = none
-		case conflicts:
-			current.Conflicts = strings.TrimSuffix(line, "\n")
-			state = none
-		case provides:
-			current.Provides = strings.TrimSuffix(line, "\n")
-			state = none
-		case depends:
-			current.Depends = strings.TrimSuffix(line, "\n")
-			state = none
-		case makeDepends:
-			current.MakeDepends = strings.TrimSuffix(line, "\n")
-			state = none
-		}
+		buf.Reset()
 	}
 
-	if current.Filename != "" {
-		readDb = append(readDb, current)
-	}
-
-	return readDb, nil
+	return nil, errors.New("unreachable code executed @ ParseDB")
 }

@@ -1,13 +1,15 @@
 package database
 
 import (
-	"strings"
+	"archive/tar"
+	"bytes"
+	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-const fileGood = `acl-2.2.53-1/someweird non chars%FILENAME%
+const fileGood = `%FILENAME%
 acl-2.2.53-1-x86_64.pkg.tar.xz
 
 %NAME%
@@ -65,27 +67,128 @@ xfsacl
 attr
 `
 
-func TestFilename(t *testing.T) {
-	database, err := DbScratchFromGUnzippedReader(strings.NewReader(fileGood))
+const gccGood = `%FILENAME%
+gcc-9.1.0-2-x86_64.pkg.tar.xz
+
+%NAME%
+gcc
+
+%BASE%
+gcc
+
+%VERSION%
+9.1.0-2
+
+%DESC%
+The GNU Compiler Collection - C and C++ frontends
+
+%GROUPS%
+base-devel
+
+%CSIZE%
+35571360
+
+%ISIZE%
+145802240
+
+%MD5SUM%
+52953cc05c0b6a112af45006a4f33f62
+
+%SHA256SUM%
+0f4325bd1d88faa05d8b1fa424c213c7270570c6dc61b9c28870c43d379134d6
+
+%PGPSIG%
+iQEzBAABCAAdFiEE82kWh9hnuBtRzgfZu+Q3cUhzKKkFAl0OmrEACgkQu+Q3cUhzKKlP4gf/RMDdvdFMzkxpvjHcHdBVR8WerjwOcfsBRV0JodZEk+0Ecqk1PBobAzgLOxYJPYG1xnvWr9IqCm0/4dwcoEJPbxiKzPGt4POC5DG0M1wQx92dEkCQrA/E6St1IsICbju0zjesS4i0IbraXtWh/CLcXeo4o0VVQrCw0lxycA21ce5NrNWMYHhtH9qSabyoPI3nx9o8v2WZvDxUUkz/V1Rc0u1HKfiTP+UrVuZ9QpCsaQXc6RmzS9oNv5yvGl4BoKZ3yGhmGlflmPcpjAWXQ6AJbKpkScGpjfne8ChtwDGCQm3qcay77ZJo2EjCtoL+Gm2rKEl91lsIyQeW4M+kogWNgw==
+
+%URL%
+https://gcc.gnu.org
+
+%LICENSE%
+GPL
+LGPL
+FDL
+custom
+
+%ARCH%
+x86_64
+
+%BUILDDATE%
+1561233125
+
+%PACKAGER%
+Bartłomiej Piotrowski <bpiotrowski@archlinux.org>
+
+%REPLACES%
+gcc-multilib
+
+%PROVIDES%
+gcc-multilib
+
+%DEPENDS%
+gcc-libs=9.1.0-2
+binutils>=2.28
+libmpc
+
+%OPTDEPENDS%
+lib32-gcc-libs: for generating code for 32-bit ABI
+
+%MAKEDEPENDS%
+binutils
+libmpc
+gcc-ada
+doxygen
+lib32-glibc
+lib32-gcc-libs
+python
+subversion
+
+%CHECKDEPENDS%
+dejagnu
+inetutils`
+
+func createTestTar() []byte {
+	// Create and add some files to the archive.
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	var files = []struct {
+		Name, Body string
+	}{
+		{"acl-2.2.53-1/desc", fileGood},
+		{"gcc-9.1.0-2/desc", gccGood},
+	}
+	for _, file := range files {
+		hdr := &tar.Header{
+			Name: file.Name,
+			Mode: 0600,
+			Size: int64(len(file.Body)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			log.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(file.Body)); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	return buf.Bytes()
+}
+
+func TestDBParser(t *testing.T) {
+
+	database, err := ParseDBgunzipped(bytes.NewReader(createTestTar()))
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(database))
-	assert.Equal(t, "acl-2.2.53-1-x86_64.pkg.tar.xz", database[0].Filename)
-	assert.Equal(t, "acl", database[0].Name)
-	assert.Equal(t, "acl", database[0].Base)
-	assert.Equal(t, "2.2.53-1", database[0].Version)
-	assert.Equal(t, "Access control list utilities, libraries and headers", database[0].Desc)
-	assert.Equal(t, "135020", database[0].CSize)
-	assert.Equal(t, "314368", database[0].ISize)
-	assert.Equal(t, "aaaea535e603f2b55cb320a42cc70397", database[0].MD5Sum)
-	assert.Equal(t, "iQFCBAABCAAsFiEEAv0cepNOYUVFhJ8ZpiNAdEmOnO4FAlsoqCgOHGFyY2hAZXdvcm0uZGUACgkQpiNAdEmOnO4++ggApA70EbUN/n7Av4UL1fFQLGfMEqL5Fk6mdKbUc1IEHdmcR2C31MWlnUPk2zvbFj8qOpD76G8bq/JerfosPsapOXW+gHdJbI4fAHTYwYqlzymeUPEDkd6/8u/FVwVs0Hdm/0moy6n9c4uKth8XF8d//Ak7i7+klxvNrvoEQM1BsFGLREGbu1ioHf3UmBZLl+kZWtM2Yv0F3F7OPCpLpWCmBhkV3FEVlYDeby3tL3bgaa0NXCbL0uBKcOTAKm1TNNJyTGTh6X8NZUqJTLxApcvF9+7qKeKnN9gEMO9NKjnpkcn+rcweIGITbae1PpTztDhwY60Gtgl7Jjr7F4PwsPN1Pw==", database[0].PGPSig)
-	assert.Equal(t, "http://savannah.nongnu.org/projects/acl", database[0].URL)
-	assert.Equal(t, "LGPL", database[0].License)
-	assert.Equal(t, "x86_64", database[0].Arch)
-	assert.Equal(t, "1529391128", database[0].BuildDate)
-	assert.Equal(t, "Christian Hesse <arch@eworm.de>", database[0].Packager)
-	assert.Equal(t, "xfsacl", database[0].Replaces)
-	assert.Equal(t, "xfsacl", database[0].Conflicts)
-	assert.Equal(t, "xfsacl", database[0].Provides)
-	assert.Equal(t, "attr", database[0].Depends)
+	assert.Equal(t, 2, len(database))
+	assert.Equal(t, database[0].Name, "acl")
+	assert.Equal(t, database[0].Version, "2.2.53")
+	assert.Equal(t, database[0].Rel, 1)
+	assert.Equal(t, database[0].Arch, "x86_64")
+
+	assert.Equal(t, database[1].Name, "gcc")
+	assert.Equal(t, database[1].Version, "9.1.0")
+	assert.Equal(t, database[1].Rel, 2)
+	assert.Equal(t, database[1].Arch, "x86_64")
 
 }
