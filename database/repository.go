@@ -36,43 +36,33 @@ func ParseDB(r io.Reader) ([]packet.Packet, error) {
 	}
 	defer zr.Close()
 
-	return ParseDBgunzipped(zr)
+	return ParseDBgunzippedSlice(zr)
 }
 
-// ParseDBCBFromFile provides a callback for ParseDBFromFile
-func ParseDBCBFromFile(filename string, callback func([]packet.Packet)) {
-	packets, err := ParseDBFromFile(filename)
-	if err != nil {
-		callback(packets)
-	} else {
-		callback(nil)
-	}
-}
+// ParseDBgunzippedSlice reads a pacman .db file and creats a []DatabaseEntry
+func ParseDBgunzippedSlice(r io.Reader) ([]packet.Packet, error) {
 
-// ParseDBCB provides a callback for ParseDB
-func ParseDBCB(r io.Reader, callback func([]packet.Packet)) {
-	packets, err := ParseDB(r)
-	if err != nil {
-		callback(packets)
-	} else {
-		callback(nil)
-	}
+	readDb := make([]packet.Packet, 0)
+
+	ParseDBgunzipped(r, func(p *packet.Packet) {
+		readDb = append(readDb, *p)
+	})
+
+	return readDb, nil
 }
 
 // ParseDBgunzipped reads a pacman .db file and creats a []DatabaseEntry
-func ParseDBgunzipped(r io.Reader) ([]packet.Packet, error) {
-
-	readDb := make([]packet.Packet, 0)
+func ParseDBgunzipped(r io.Reader, cb func(*packet.Packet)) error {
 
 	buf := &bytes.Buffer{}
 	reader := tar.NewReader(r)
 	for {
 		pkg, err := reader.Next()
 		if err == io.EOF {
-			return readDb, nil
+			return nil
 		}
 		if err != nil {
-			return nil, errors.New("Error while reading tar (DbScratch)")
+			return errors.New("Error while reading tar (DbScratch)")
 		}
 		if pkg.FileInfo().IsDir() {
 			continue
@@ -80,24 +70,22 @@ func ParseDBgunzipped(r io.Reader) ([]packet.Packet, error) {
 		io.Copy(buf, reader)
 		str, err := buf.ReadString('\n')
 		if err != nil {
-			panic(err)
+			return (err)
 		}
 		if str != "%FILENAME%\n" {
-			panic("Invalid filename designator: " + str)
+			return errors.New("Invalid filename designator: " + str)
 		}
 		filename, err := buf.ReadString('\n')
 		if err != nil {
-			panic(err)
+			return (err)
 		}
 		p, err := packet.FromFilename(filename)
 		if err != nil {
-			panic(err)
+			return (err)
 		}
 
-		readDb = append(readDb, *p)
+		cb(p)
 
 		buf.Reset()
 	}
-
-	return nil, errors.New("unreachable code executed @ ParseDB")
 }
