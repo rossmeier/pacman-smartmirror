@@ -187,7 +187,7 @@ func (c *Cache) initRepos() error {
 }
 
 // GetDBFile serves the latest cached version of a given database
-func (c *Cache) GetDBFile(repo *database.Repository) (ReadSeekCloser, error) {
+func (c *Cache) GetDBFile(repo *database.Repository) (ReadSeekCloser, time.Time, error) {
 	if _, ok := c.repos[*repo]; ok {
 		c.repoMu.Lock()
 		defer c.repoMu.Unlock()
@@ -195,13 +195,18 @@ func (c *Cache) GetDBFile(repo *database.Repository) (ReadSeekCloser, error) {
 		path := filepath.Join(c.directory, repo.Arch, repo.Name+".db")
 		file, err := os.Open(path)
 		if err != nil {
-			return nil, errors.Wrap(err, "Error opening repository file")
+			return nil, time.Time{}, errors.Wrap(err, "Error opening repository file")
 		}
 
-		return file, nil
+		modtime := time.Time{}
+		if stat, err := os.Stat(path); err == nil {
+			modtime = stat.ModTime()
+		}
+
+		return file, modtime, nil
 	}
 
-	return nil, errors.New("Database file not found")
+	return nil, time.Time{}, errors.New("Database file not found")
 }
 
 // ProxyRepo will proxy the given repository database file from a mirror
