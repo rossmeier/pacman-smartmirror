@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/veecue/pacman-smartmirror/cache"
 	"github.com/veecue/pacman-smartmirror/config"
@@ -24,6 +25,14 @@ func main() {
 	if err != nil {
 		log.Fatalf(`Error initing cache "%s": %v`, config.C.CacheDirectory, err)
 	}
+	c.UpdateDatabases(nil)
+	go func() {
+		res := make(chan error)
+		for range time.Tick(20 * time.Minute) {
+			c.UpdateDatabases(res)
+			<-res
+		}
+	}()
 
 	s := server.New(c)
 	log.Println("Listening on", config.C.Listen)
