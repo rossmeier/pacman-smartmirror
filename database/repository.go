@@ -5,3 +5,7 @@ type Repository struct {
 	Name string
 	Arch string
 }
+
+func (r Repository) String() string {
+	return r.Arch + "/" + r.Name
+}

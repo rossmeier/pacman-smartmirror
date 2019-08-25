@@ -95,7 +95,7 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeek
 	defer c.mu.Unlock()
 
 	// Download the packet's repo in the backround if we don't have it yet
-	go c.downloadRepo(repo)
+	go c.addRepo(repo, nil)
 
 	// First: check if the packet is currently being downloaded
 	if download, ok := c.downloads[p.Filename()]; ok && download.Dl.P == *p {
