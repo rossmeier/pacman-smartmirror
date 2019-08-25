@@ -178,7 +178,7 @@ func createTestTar() []byte {
 
 func TestDBParser(t *testing.T) {
 
-	database, err := ParseDBgunzippedSlice(bytes.NewReader(createTestTar()))
+	database, err := ParseDBGUnzippedSlice(bytes.NewReader(createTestTar()))
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(database))
 	assert.Equal(t, database[0].Name, "acl")

@@ -47,7 +47,7 @@ func ParseDB(r io.Reader, cb func(*packet.Packet)) error {
 	}
 	defer zr.Close()
 
-	return ParseDBgunzipped(r, cb)
+	return ParseDBGUnzipped(r, cb)
 }
 
 // ParseDBSlice reads a pacman .db file and creates a []packet.Packet
@@ -58,23 +58,23 @@ func ParseDBSlice(r io.Reader) ([]packet.Packet, error) {
 	}
 	defer zr.Close()
 
-	return ParseDBgunzippedSlice(zr)
+	return ParseDBGUnzippedSlice(zr)
 }
 
-// ParseDBgunzippedSlice reads a pacman .db file and creates a []packet.Packet
-func ParseDBgunzippedSlice(r io.Reader) ([]packet.Packet, error) {
+// ParseDBGUnzippedSlice reads a pacman .db file and creates a []packet.Packet
+func ParseDBGUnzippedSlice(r io.Reader) ([]packet.Packet, error) {
 
 	readDb := make([]packet.Packet, 0)
 
-	ParseDBgunzipped(r, func(p *packet.Packet) {
+	ParseDBGUnzipped(r, func(p *packet.Packet) {
 		readDb = append(readDb, *p)
 	})
 
 	return readDb, nil
 }
 
-// ParseDBgunzipped reads a pacman .db file and will call cb for each packet
-func ParseDBgunzipped(r io.Reader, cb func(*packet.Packet)) error {
+// ParseDBGUnzipped reads a pacman .db file and will call cb for each packet
+func ParseDBGUnzipped(r io.Reader, cb func(*packet.Packet)) error {
 
 	buf := &bytes.Buffer{}
 	reader := tar.NewReader(r)
