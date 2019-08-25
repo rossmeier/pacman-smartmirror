@@ -59,7 +59,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		reader, err := s.packetCache.GetDBFile(repo)
+		reader, modtime, err := s.packetCache.GetDBFile(repo)
 		if err != nil {
 			// Proxy database directly from mirror if not in cache
 			s.packetCache.ProxyRepo(w, r, repo)
@@ -67,7 +67,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		defer reader.Close()
-		http.ServeContent(w, r, filename, time.Time{}, reader)
+		http.ServeContent(w, r, filename, modtime, reader)
 		return
 	}
 
