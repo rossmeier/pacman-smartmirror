@@ -17,7 +17,6 @@ var (
 )
 
 func main() {
-
 	flag.Parse()
 	m, err := mirrorlist.FromFile(*mirrorlistFile)
 	if err != nil {

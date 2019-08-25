@@ -17,19 +17,41 @@ type Repository struct {
 	Arch string
 }
 
-// ParseDBFromFile reads a pacman .db file and creats a []packet.Packet directly from File
-func ParseDBFromFile(filename string) ([]packet.Packet, error) {
+// ParseDBFromFile reads a pacman .db file and call cb for each packet directly from File
+func ParseDBFromFile(filename string, cb func(*packet.Packet)) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return errors.Wrap(err, "Error reading file")
+	}
+	defer file.Close()
+
+	return ParseDB(file, cb)
+}
+
+// ParseDBFromFileSlice reads a pacman .db file and creates a []packet.Packet directly from File
+func ParseDBFromFileSlice(filename string) ([]packet.Packet, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error reading file")
 	}
 	defer file.Close()
 
-	return ParseDB(file)
+	return ParseDBSlice(file)
 }
 
-// ParseDB reads a pacman .db file and creats a []packet.Packet
-func ParseDB(r io.Reader) ([]packet.Packet, error) {
+// ParseDB reads a pacman .db file and will call cb for each packet
+func ParseDB(r io.Reader, cb func(*packet.Packet)) error {
+	zr, err := gzip.NewReader(r)
+	if err != nil {
+		return errors.Wrap(err, "Error gunzipping file")
+	}
+	defer zr.Close()
+
+	return ParseDBgunzipped(r, cb)
+}
+
+// ParseDBSlice reads a pacman .db file and creates a []packet.Packet
+func ParseDBSlice(r io.Reader) ([]packet.Packet, error) {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error gunzipping file")
@@ -39,7 +61,7 @@ func ParseDB(r io.Reader) ([]packet.Packet, error) {
 	return ParseDBgunzippedSlice(zr)
 }
 
-// ParseDBgunzippedSlice reads a pacman .db file and creats a []DatabaseEntry
+// ParseDBgunzippedSlice reads a pacman .db file and creates a []packet.Packet
 func ParseDBgunzippedSlice(r io.Reader) ([]packet.Packet, error) {
 
 	readDb := make([]packet.Packet, 0)
@@ -51,7 +73,7 @@ func ParseDBgunzippedSlice(r io.Reader) ([]packet.Packet, error) {
 	return readDb, nil
 }
 
-// ParseDBgunzipped reads a pacman .db file and creats a []DatabaseEntry
+// ParseDBgunzipped reads a pacman .db file and will call cb for each packet
 func ParseDBgunzipped(r io.Reader, cb func(*packet.Packet)) error {
 
 	buf := &bytes.Buffer{}
