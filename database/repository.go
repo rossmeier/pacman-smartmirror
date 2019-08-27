@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 	"github.com/veecue/pacman-smartmirror/packet"
@@ -51,7 +52,7 @@ func ParseDB(r io.Reader, cb func(*packet.Packet)) error {
 	}
 	defer zr.Close()
 
-	return ParseDBGUnzipped(r, cb)
+	return ParseDBGUnzipped(zr, cb)
 }
 
 // ParseDBSlice reads a pacman .db file and creates a []packet.Packet
@@ -88,9 +89,12 @@ func ParseDBGUnzipped(r io.Reader, cb func(*packet.Packet)) error {
 			return nil
 		}
 		if err != nil {
-			return errors.New("Error while reading tar (DbScratch)")
+			return errors.Wrap(err, "Error while reading tar")
 		}
 		if pkg.FileInfo().IsDir() {
+			continue
+		}
+		if _, name := filepath.Split(pkg.Name); name != "desc" {
 			continue
 		}
 		io.Copy(buf, reader)

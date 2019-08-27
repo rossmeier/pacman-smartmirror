@@ -11,6 +11,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/veecue/pacman-smartmirror/database"
+	"github.com/veecue/pacman-smartmirror/packet"
 )
 
 func (c *Cache) addRepo(repo *database.Repository, result chan<- error) error {
@@ -79,6 +80,10 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 			continue
 		}
 
+		if resp.ContentLength <= 0 {
+			continue
+		}
+
 		// seems to work, use this mirror
 		var serverModTime *time.Time
 		if t, err := http.ParseTime(resp.Header.Get("Last-Modified")); err == nil {
@@ -135,8 +140,6 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 				os.Chtimes(file, time.Now(), *serverModTime)
 			}
 
-			//TODO: Make sure that all updated packages from the repo are downloaded at this point
-
 			c.repos[*repo] = struct{}{}
 			delete(c.repoDownloads, *repo)
 
@@ -147,6 +150,32 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 	}
 
 	return errors.New("Database could not be downloaded from any mirror")
+}
+
+func (c *Cache) updatePackets(repo database.Repository) {
+	toDownload := make([]*packet.Packet, 0)
+	err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p *packet.Packet) {
+		c.mu.Lock()
+		for _, other := range c.packets.FindOtherVersions(p) {
+			if packet.CompareVersions(p.Version, other.Version) > 0 {
+				toDownload = append(toDownload, p)
+				break
+			}
+		}
+		c.mu.Unlock()
+	})
+	if err != nil {
+		log.Println("Error parsing db file:", err)
+		return
+	}
+	for _, p := range toDownload {
+		if c.backgroundDownload(&download{*p, repo, nil}) == nil {
+			if err != nil {
+				log.Println(errors.Wrapf(err, "Error downloading %s", p.Filename()))
+			}
+		}
+	}
+	log.Println("All cached packages for", repo, "up to date")
 }
 
 func (c *Cache) initRepos() error {
@@ -266,6 +295,8 @@ func (c *Cache) UpdateDatabases(result chan<- error) {
 				lastErr = errors.Wrap(err, "Error updating databases")
 				log.Println(lastErr)
 			}
+
+			go c.updatePackets(repo)
 		}
 		if lastErr == nil {
 			log.Println("All databases updated successfully")

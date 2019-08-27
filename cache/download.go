@@ -156,6 +156,42 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 	dl.Dl.Callback(nil)
 }
 
+func (c *Cache) backgroundDownload(dl *download) error {
+	c.bgDownload.Lock()
+	defer c.bgDownload.Unlock()
+	c.mu.Lock()
+	if _, ok := c.downloads[dl.P.Filename()]; ok {
+		c.mu.Unlock()
+		return errors.New("Packet already being downloaded")
+	}
+
+	if c.packets.ByFilename(dl.P.Filename()) != nil {
+		c.mu.Unlock()
+		return errors.New("Packet already in cache")
+	}
+
+	log.Println("Downloading", dl.P.Filename())
+	result := make(chan error)
+	dl.Chan = result
+	_, err := c.startDownload(dl)
+	c.mu.Unlock()
+
+	if err != nil {
+		err = errors.Wrap(err, "Error on starting background download")
+		log.Println(err)
+		return err
+	}
+
+	err = <-result
+	if err != nil {
+		err = errors.Wrap(err, "Error during background download")
+		log.Println(err)
+		return err
+	}
+
+	return nil
+}
+
 type countWriter struct {
 	W       io.Writer
 	Written *int64
