@@ -26,6 +26,7 @@ type Cache struct {
 	repoDownloads map[database.Repository]struct{}
 	mu            sync.Mutex
 	repoMu        sync.Mutex
+	bgDownload    sync.Mutex
 }
 
 // ReadSeekCloser implements io.ReadSeeker and io.Closer
