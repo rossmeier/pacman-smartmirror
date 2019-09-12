@@ -124,6 +124,9 @@ func (c *Cache) startDownload(d *download) (*ongoingDownload, error) {
 	return nil, errors.New("Packet could not be downloaded from any mirror")
 }
 
+// Asynchronous callback for a finished download
+// The function will rename the .part file to the original file and register it
+// in the cache registry.
 func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -156,6 +159,8 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 	dl.Dl.Callback(nil)
 }
 
+// backgroundDownload will start the given download in the background.
+// Only one background download will be active at a given time
 func (c *Cache) backgroundDownload(dl *download) error {
 	c.bgDownload.Lock()
 	defer c.bgDownload.Unlock()
@@ -192,6 +197,8 @@ func (c *Cache) backgroundDownload(dl *download) error {
 	return nil
 }
 
+// countWriter wraps a writer. The total number of bytes written will be appended to *Written
+// in an atomic manner.
 type countWriter struct {
 	W       io.Writer
 	Written *int64

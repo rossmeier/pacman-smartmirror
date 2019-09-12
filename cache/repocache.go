@@ -14,6 +14,9 @@ import (
 	"github.com/veecue/pacman-smartmirror/packet"
 )
 
+// checks if the given repository is already in the repository cache and downloads
+// it asynchronously. If the function returns no immediate error (nil), it will write
+// the final error to the channel if the channel is not nil.
 func (c *Cache) addRepo(repo *database.Repository, result chan<- error) error {
 	c.repoMu.Lock()
 	_, ok := c.repos[*repo]
@@ -21,6 +24,7 @@ func (c *Cache) addRepo(repo *database.Repository, result chan<- error) error {
 	if ok {
 		return errors.New("Repo already available")
 	}
+
 	log.Println("Downloading repo", repo)
 	err := c.downloadRepo(repo, result)
 	if err == nil {
@@ -28,9 +32,13 @@ func (c *Cache) addRepo(repo *database.Repository, result chan<- error) error {
 	} else {
 		log.Println("Error downloading", repo, err)
 	}
+
 	return err
 }
 
+// downloadRepo will download the database file of the given repository and add
+// it to the repository cache. If no immediate error occurs (nil is returned),
+// the final error will be pushed to the given channel if the channel is not nil.
 func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) error {
 	callback := func(err error) {
 		if result != nil {
@@ -47,6 +55,8 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 
 	file := filepath.Join(c.directory, repo.Arch, repo.Name+".db")
 
+	// Send the modtime of the cached file to the server so only a later
+	// version is downloaded.
 	var modTime *time.Time
 	if _, ok := c.repos[*repo]; ok {
 		stat, err := os.Stat(file)
@@ -84,12 +94,13 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 			continue
 		}
 
-		// seems to work, use this mirror
+		// Seems to work, use this mirror
 		var serverModTime *time.Time
 		if t, err := http.ParseTime(resp.Header.Get("Last-Modified")); err == nil {
 			serverModTime = &t
 		}
 
+		// Cancel download if the file given by the server is older than the local file
 		if modTime != nil && serverModTime != nil && (modTime.After(*serverModTime) || modTime.Equal(*serverModTime)) {
 			log.Println("Database", repo, "already up to date")
 			go callback(nil)
@@ -103,7 +114,7 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 			return err
 		}
 
-		// create the temporary file to store the download
+		// Create the temporary file to store the download
 		f, err := os.Create(file + ".part")
 		if err != nil {
 			err = errors.Wrap(err, "Error creating repo file")
@@ -152,22 +163,28 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 	return errors.New("Database could not be downloaded from any mirror")
 }
 
+// updatePackets will update all locally cached packages that are part of the given repository
 func (c *Cache) updatePackets(repo database.Repository) {
+	// List of packages that are out of date
 	toDownload := make([]*packet.Packet, 0)
 	err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p *packet.Packet) {
 		c.mu.Lock()
 		for _, other := range c.packets.FindOtherVersions(p) {
 			if packet.CompareVersions(p.Version, other.Version) > 0 {
+				// Version in the repository is later than the local one
 				toDownload = append(toDownload, p)
 				break
 			}
 		}
 		c.mu.Unlock()
 	})
+
 	if err != nil {
 		log.Println("Error parsing db file:", err)
 		return
 	}
+
+	// Update all outdated packages
 	for _, p := range toDownload {
 		if c.backgroundDownload(&download{*p, repo, nil}) == nil {
 			if err != nil {
@@ -175,9 +192,11 @@ func (c *Cache) updatePackets(repo database.Repository) {
 			}
 		}
 	}
+
 	log.Println("All cached packages for", repo, "up to date")
 }
 
+// initRepos scans the cache directory and inits the repo caches accordingly
 func (c *Cache) initRepos() error {
 	return filepath.Walk(c.directory, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -197,6 +216,7 @@ func (c *Cache) initRepos() error {
 		if arch == "" {
 			return nil
 		}
+
 		if !strings.HasSuffix(db, ".db") {
 			if strings.HasSuffix(db, ".part") {
 				return os.Remove(path)
@@ -215,7 +235,8 @@ func (c *Cache) initRepos() error {
 	})
 }
 
-// GetDBFile serves the latest cached version of a given database
+// GetDBFile returns the latest cached version of a given database together with
+// the time it was updated.
 func (c *Cache) GetDBFile(repo *database.Repository) (ReadSeekCloser, time.Time, error) {
 	if _, ok := c.repos[*repo]; ok {
 		c.repoMu.Lock()
@@ -239,6 +260,7 @@ func (c *Cache) GetDBFile(repo *database.Repository) (ReadSeekCloser, time.Time,
 }
 
 // ProxyRepo will proxy the given repository database file from a mirror
+// with out downloading it to the cache.
 func (c *Cache) ProxyRepo(w http.ResponseWriter, r *http.Request, repo *database.Repository) {
 	for _, mirror := range c.mirrors {
 		req, _ := http.NewRequest("GET", mirror.RepoURL(repo), nil)
@@ -268,7 +290,8 @@ func (c *Cache) ProxyRepo(w http.ResponseWriter, r *http.Request, repo *database
 // UpdateDatabases will update all cached database files in the background
 // The error (may be nil) WILL be sent to the channel EXACTLY ONCE
 //
-// TODO: also update packages
+// For each updated database, updating their accoring cached packages
+// will be started in the background.
 func (c *Cache) UpdateDatabases(result chan<- error) {
 	// Gather list of all databases
 	toUpdate := make([]database.Repository, 0)
@@ -303,6 +326,7 @@ func (c *Cache) UpdateDatabases(result chan<- error) {
 		} else {
 			log.Println("Error(s) during database updates")
 		}
+
 		if result != nil {
 			result <- lastErr
 		}
