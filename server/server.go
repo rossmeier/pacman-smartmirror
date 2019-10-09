@@ -78,6 +78,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, ok := r.URL.Query()["bg"]; r.Method == "HEAD" && ok {
+		s.packetCache.AddPacket(p, repo)
+		w.WriteHeader(200)
+		return
+	}
+
 	reader, err := s.packetCache.GetPacket(p, repo)
 	if err != nil {
 		log.Println("Error serving", p.Filename(), err)

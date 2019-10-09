@@ -171,3 +171,12 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeek
 	}
 	return download.GetReader()
 }
+
+// AddPacket downloads the given packet in the background when possible and
+// adds it to the cache afterwards
+func (c *Cache) AddPacket(p *packet.Packet, repo *database.Repository) {
+	go c.backgroundDownload(&download{
+		P: *p,
+		R: *repo,
+	})
+}
