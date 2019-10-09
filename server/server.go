@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -79,6 +80,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	reader, err := s.packetCache.GetPacket(p, repo)
 	if err != nil {
+		log.Println("Error serving", p.Filename(), err)
 		http.NotFound(w, r)
 		return
 	}

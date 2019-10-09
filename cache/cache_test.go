@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,17 +62,23 @@ func TestSimple(t *testing.T) {
 	// Place some data in the cache dir
 	const existing = "xorg-xinit-1.4.1-1-x86_64.pkg.tar.xz"
 	const part = "zbar-0.23-1-x86_64.pkg.tar.xz.part"
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, _arch, _repo), 0755))
 	for _, f := range []string{part, existing} {
-		assert.NoError(t, ioutil.WriteFile(path.Join(dir, f), []byte("nothing here"), 0644))
+		assert.NoError(t, ioutil.WriteFile(filepath.Join(dir, _arch, _repo, f), []byte("nothing here"), 0644))
 	}
 
 	c, err := New(dir, mirrorlist.Mirrorlist{mirrorlist.Mirror(s.URL)})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(c.packets), "Wrong packet number (packets: %v)", c.packets)
-	for _, p := range c.packets {
+	repo := database.Repository{
+		Name: _repo,
+		Arch: _arch,
+	}
+	assert.Contains(t, c.packets, repo)
+	for _, p := range c.packets[repo] {
 		assert.Equal(t, existing, p.Filename())
 	}
-	_, err = os.Stat(path.Join(dir, part))
+	_, err = os.Stat(filepath.Join(dir, part))
 	assert.True(t, os.IsNotExist(err))
 
 	p, err := packet.FromFilename(_filename)

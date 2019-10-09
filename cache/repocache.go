@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -167,9 +166,9 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 func (c *Cache) updatePackets(repo database.Repository) {
 	// List of packages that are out of date
 	toDownload := make([]*packet.Packet, 0)
-	err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p *packet.Packet) {
+	err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p *packet.Packet, _ io.Reader) {
 		c.mu.Lock()
-		for _, other := range c.packets.FindOtherVersions(p) {
+		for _, other := range c.packets[repo].FindOtherVersions(p) {
 			if packet.CompareVersions(p.Version, other.Version) > 0 {
 				// Version in the repository is later than the local one
 				toDownload = append(toDownload, p)
@@ -194,45 +193,6 @@ func (c *Cache) updatePackets(repo database.Repository) {
 	}
 
 	log.Println("All cached packages for", repo, "up to date")
-}
-
-// initRepos scans the cache directory and inits the repo caches accordingly
-func (c *Cache) initRepos() error {
-	return filepath.Walk(c.directory, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		rel, err := filepath.Rel(c.directory, path)
-		if err != nil {
-			return err
-		}
-
-		arch, db := filepath.Split(rel)
-		if arch == "" {
-			return nil
-		}
-
-		if !strings.HasSuffix(db, ".db") {
-			if strings.HasSuffix(db, ".part") {
-				return os.Remove(path)
-			}
-			return nil
-		}
-
-		// remove final slash
-		arch = filepath.Clean(arch)
-
-		c.repos[database.Repository{
-			Name: strings.TrimSuffix(db, ".db"),
-			Arch: arch,
-		}] = struct{}{}
-		return err
-	})
 }
 
 // GetDBFile returns the latest cached version of a given database together with

@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
@@ -35,6 +35,14 @@ func (d *download) Callback(err error) {
 	if d.Chan != nil {
 		d.Chan <- err
 	}
+}
+
+func (d *download) Path() string {
+	return filepath.Join(d.R.Arch, d.R.Name, d.P.Filename())
+}
+
+func (d *download) DirPath() string {
+	return filepath.Join(d.R.Arch, d.R.Name)
 }
 
 // GetReader returns a ReadSeeker that will read the already downloaded content from the file
@@ -75,7 +83,13 @@ func (c *Cache) startDownload(d *download) (*ongoingDownload, error) {
 		dl := &ongoingDownload{
 			Dl:       *d,
 			filesize: resp.ContentLength,
-			filename: path.Join(c.directory, d.P.Filename()+".part"),
+			filename: filepath.Join(c.directory, d.Path()+".part"),
+		}
+
+		// create the directory to store the file in if neccessary
+		err = os.MkdirAll(filepath.Join(c.directory, d.DirPath()), 0755)
+		if err != nil && !os.IsExist(err) {
+			return nil, errors.Wrapf(err, "Error creating dir %s", d.DirPath())
 		}
 
 		// create the temporary file to store the download
@@ -85,7 +99,7 @@ func (c *Cache) startDownload(d *download) (*ongoingDownload, error) {
 		}
 
 		// store this download to the currently ongoing downloads
-		c.downloads[dl.Dl.P.Filename()] = dl
+		c.downloads[dl.Dl.Path()] = dl
 
 		// do actual download in the background
 		go func() {
@@ -100,7 +114,7 @@ func (c *Cache) startDownload(d *download) (*ongoingDownload, error) {
 				err = errors.Wrap(err, "Error downloading to local cache")
 				log.Println(err)
 				os.Remove(dl.filename)
-				delete(c.downloads, dl.Dl.P.Filename())
+				delete(c.downloads, dl.Dl.Path())
 				dl.Dl.Callback(err)
 				return
 			}
@@ -109,7 +123,7 @@ func (c *Cache) startDownload(d *download) (*ongoingDownload, error) {
 				err = errors.New("Too few bytes read while downloading to cache")
 				log.Println(err)
 				os.Remove(dl.filename)
-				delete(c.downloads, dl.Dl.P.Filename())
+				delete(c.downloads, dl.Dl.Path())
 				dl.Dl.Callback(err)
 				return
 			}
@@ -132,30 +146,34 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 	defer c.mu.Unlock()
 
 	// Rename donwloaded file to final filename in cache
-	err = os.Rename(dl.filename, path.Join(c.directory, dl.Dl.P.Filename()))
+	err = os.Rename(dl.filename, filepath.Join(c.directory, dl.Dl.Path()))
 	if err != nil {
 		err = errors.Wrap(err, "Failed moving file")
 		log.Println(err)
 		os.Remove(dl.filename)
-		delete(c.downloads, dl.Dl.P.Filename())
+		delete(c.downloads, dl.Dl.Path())
 		dl.Dl.Callback(err)
 		return
 	}
 
 	// Remove old versions
-	for _, p := range c.packets.FindOtherVersions(&dl.Dl.P) {
+	for _, p := range c.packets[dl.Dl.R].FindOtherVersions(&dl.Dl.P) {
 		diff := packet.CompareVersions(p.Version, dl.Dl.P.Version)
 		if diff < 0 {
-			os.Remove(path.Join(c.directory, p.Filename()))
-			c.packets.Delete(p.Filename())
-			log.Println("Removed old packet", dl.Dl.P.Filename())
+			os.Remove(filepath.Join(c.directory, dl.Dl.R.Arch, dl.Dl.R.Name, p.Filename()))
+			c.packets[dl.Dl.R].Delete(p.Filename())
+			log.Println("Removed old packet", filepath.Join(dl.Dl.R.Arch, dl.Dl.R.Name, p.Filename()))
 		}
 	}
 
-	c.packets.Insert(&dl.Dl.P)
-	delete(c.downloads, dl.Dl.P.Filename())
+	if _, ok := c.packets[dl.Dl.R]; !ok {
+		c.packets[dl.Dl.R] = make(packet.Set)
+	}
 
-	log.Println("Packet", dl.Dl.P.Filename(), "now available!")
+	c.packets[dl.Dl.R].Insert(&dl.Dl.P)
+	delete(c.downloads, dl.Dl.Path())
+
+	log.Println("Packet", dl.Dl.R, dl.Dl.P.Filename(), "now available!")
 	dl.Dl.Callback(nil)
 }
 
@@ -165,17 +183,17 @@ func (c *Cache) backgroundDownload(dl *download) error {
 	c.bgDownload.Lock()
 	defer c.bgDownload.Unlock()
 	c.mu.Lock()
-	if _, ok := c.downloads[dl.P.Filename()]; ok {
+	if _, ok := c.downloads[dl.Path()]; ok {
 		c.mu.Unlock()
 		return errors.New("Packet already being downloaded")
 	}
 
-	if c.packets.ByFilename(dl.P.Filename()) != nil {
+	if c.packets[dl.R].ByFilename(dl.P.Filename()) != nil {
 		c.mu.Unlock()
 		return errors.New("Packet already in cache")
 	}
 
-	log.Println("Downloading", dl.P.Filename())
+	log.Println("Downloading", dl.Path())
 	result := make(chan error)
 	dl.Chan = result
 	_, err := c.startDownload(dl)
