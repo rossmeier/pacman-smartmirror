@@ -22,8 +22,13 @@ func (r Repository) String() string {
 	return r.Arch + "/" + r.Name
 }
 
+// PacketCallback is a callback for packets that will receive the packet parsed from
+// the filename and a reader containing the rest of the packages "desc" file with
+// further information
+type PacketCallback func(*packet.Packet, io.Reader)
+
 // ParseDBFromFile reads a pacman .db file and call cb for each packet directly from File
-func ParseDBFromFile(filename string, cb func(*packet.Packet)) error {
+func ParseDBFromFile(filename string, cb PacketCallback) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return errors.Wrap(err, "Error reading file")
@@ -45,7 +50,7 @@ func ParseDBFromFileSlice(filename string) ([]packet.Packet, error) {
 }
 
 // ParseDB reads a pacman .db file and will call cb for each packet
-func ParseDB(r io.Reader, cb func(*packet.Packet)) error {
+func ParseDB(r io.Reader, cb PacketCallback) error {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
 		return errors.Wrap(err, "Error gunzipping file")
@@ -68,10 +73,9 @@ func ParseDBSlice(r io.Reader) ([]packet.Packet, error) {
 
 // ParseDBGUnzippedSlice reads a pacman .db file and creates a []packet.Packet
 func ParseDBGUnzippedSlice(r io.Reader) ([]packet.Packet, error) {
-
 	readDb := make([]packet.Packet, 0)
 
-	ParseDBGUnzipped(r, func(p *packet.Packet) {
+	ParseDBGUnzipped(r, func(p *packet.Packet, _ io.Reader) {
 		readDb = append(readDb, *p)
 	})
 
@@ -79,7 +83,7 @@ func ParseDBGUnzippedSlice(r io.Reader) ([]packet.Packet, error) {
 }
 
 // ParseDBGUnzipped reads a pacman .db file and will call cb for each packet
-func ParseDBGUnzipped(r io.Reader, cb func(*packet.Packet)) error {
+func ParseDBGUnzipped(r io.Reader, cb PacketCallback) error {
 
 	buf := &bytes.Buffer{}
 	reader := tar.NewReader(r)
@@ -114,7 +118,7 @@ func ParseDBGUnzipped(r io.Reader, cb func(*packet.Packet)) error {
 			return (err)
 		}
 
-		cb(p)
+		cb(p, buf)
 
 		buf.Reset()
 	}

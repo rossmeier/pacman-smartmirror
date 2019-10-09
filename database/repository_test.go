@@ -2,11 +2,14 @@ package database
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
+	"io"
 	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/veecue/pacman-smartmirror/packet"
 )
 
 const fileGood = `%FILENAME%
@@ -187,4 +190,31 @@ func TestDBParser(t *testing.T) {
 	assert.Equal(t, database[1].Name, "gcc")
 	assert.Equal(t, database[1].Version, "9.1.0-2")
 	assert.Equal(t, database[1].Arch, "x86_64")
+}
+
+func TestOtherAttributes(t *testing.T) {
+	first := true
+	err := ParseDBGUnzipped(bytes.NewReader(createTestTar()), func(p *packet.Packet, r io.Reader) {
+		if !first {
+			return
+		}
+		first = false
+
+		rd := bufio.NewReader(r)
+		for {
+			line, err := rd.ReadString('\n')
+			assert.NoError(t, err)
+			if err != nil {
+				break
+			}
+			if line == "%SHA256SUM%\n" {
+				line, err = rd.ReadString('\n')
+				assert.NoError(t, err)
+				assert.Equal(t, "27f4020c77a11992a75b5b99bc1c22797defcea6283b77eb2c311d77b3404443\n", line)
+				break
+			}
+		}
+	})
+
+	assert.NoError(t, err)
 }
