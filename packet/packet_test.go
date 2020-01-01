@@ -7,14 +7,22 @@ import (
 )
 
 func TestFilename(t *testing.T) {
-	const filename = "xorg-util-macros-1.19.2-1-any.pkg.tar.xz"
-	packet, err := FromFilename(filename)
-	assert.NoError(t, err, "Error while parsing filename: %v", err)
-	assert.Equal(t, filename, packet.Filename())
+	for _, filename := range []string{
+		"xorg-util-macros-1.19.2-1-any.pkg.tar.xz",
+		"xorg-util-macros-1.21.2-1-any.pkg.tar.zst",
+	} {
+		packet, err := FromFilename(filename)
+		assert.NoError(t, err, "Error while parsing filename: %v", err)
+		assert.Equal(t, filename, packet.Filename())
+	}
 }
 
 func TestInvalidFilename(t *testing.T) {
-	const filename = "linux.pkg.tar.xz"
-	_, err := FromFilename(filename)
-	assert.Error(t, err)
+	for _, filename := range []string{
+		"linux.pkg.tar.xz",
+		"xorg-util-macros-1.21.2-1-any.pkg.tar.foo",
+	} {
+		_, err := FromFilename(filename)
+		assert.Error(t, err)
+	}
 }
