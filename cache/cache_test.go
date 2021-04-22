@@ -18,6 +18,8 @@ import (
 	"github.com/veecue/pacman-smartmirror/mirrorlist"
 	"github.com/veecue/pacman-smartmirror/packet"
 	"github.com/veecue/pacman-smartmirror/test"
+
+	_ "github.com/veecue/pacman-smartmirror/impl/pacman"
 )
 
 const (
@@ -81,7 +83,7 @@ func TestSimple(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, part))
 	assert.True(t, os.IsNotExist(err))
 
-	p, err := packet.FromFilename(_filename)
+	p, err := packet.FromFilename("pacman", _filename)
 	assert.NoError(t, err)
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {

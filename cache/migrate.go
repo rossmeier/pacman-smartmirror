@@ -13,28 +13,28 @@ import (
 	"github.com/veecue/pacman-smartmirror/packet"
 )
 
-func (c *Cache) migrate(toMigrate []*packet.Packet) error {
+func (c *Cache) migrate(toMigrate []packet.Packet) error {
 	if len(toMigrate) > 0 {
 		log.Println("Starting migration of", len(toMigrate), "packages...")
 	}
-	sizes := make(map[packet.Packet]string)
+	sizes := make(map[string]string)
 	for _, p := range toMigrate {
 		fi, err := os.Stat(filepath.Join(c.directory, p.Filename()))
 		if err != nil {
 			return errors.Wrapf(err, "Error stating %s", p.Filename())
 		}
-		sizes[*p] = strconv.FormatInt(fi.Size(), 10)
+		sizes[p.Filename()] = strconv.FormatInt(fi.Size(), 10)
 	}
 
 	type hasRepo struct {
 		R database.Repository
 		B bool
 	}
-	cache := make(map[packet.Packet]*hasRepo)
+	cache := make(map[string]*hasRepo)
 	for repo := range c.repos {
 		err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"),
-			func(p *packet.Packet, r io.Reader) {
-				size, ok := sizes[*p]
+			func(p packet.Packet, r io.Reader) {
+				size, ok := sizes[p.Filename()]
 				if !ok {
 					return
 				}
@@ -51,14 +51,14 @@ func (c *Cache) migrate(toMigrate []*packet.Packet) error {
 						}
 						if line == size+"\n" {
 							// Found candidate
-							if cached, ok := cache[*p]; ok {
+							if cached, ok := cache[p.Filename()]; ok {
 								// Double match, discarding
 								cached.B = false
 								log.Printf("Double match for %s: found in %s and %s with size %s",
 									p.Filename(), cached.R, repo, size)
 								break
 							}
-							cache[*p] = &hasRepo{
+							cache[p.Filename()] = &hasRepo{
 								R: repo,
 								B: true,
 							}
@@ -81,11 +81,11 @@ func (c *Cache) migrate(toMigrate []*packet.Packet) error {
 			}
 
 			err = os.Rename(
-				filepath.Join(c.directory, p.Filename()),
-				filepath.Join(c.directory, has.R.Arch, has.R.Name, p.Filename()))
+				filepath.Join(c.directory, p),
+				filepath.Join(c.directory, has.R.Arch, has.R.Name, p))
 
 			if err != nil {
-				return errors.Wrapf(err, "Error moving %s", p.Filename())
+				return errors.Wrapf(err, "Error moving %s", p)
 			}
 
 			c.mu.Lock()
@@ -93,13 +93,17 @@ func (c *Cache) migrate(toMigrate []*packet.Packet) error {
 				c.packets[has.R] = make(packet.Set)
 			}
 
-			c.packets[has.R].Insert(&p)
+			pkg, err := packet.FromFilename("pacman", p)
+			if err != nil {
+				return err
+			}
+			c.packets[has.R].Insert(pkg)
 			c.mu.Unlock()
 		}
 	}
 
 	for p := range sizes {
-		log.Println("No match found for", p.Filename())
+		log.Println("No match found for", p)
 	}
 
 	log.Println("Migration done")

@@ -72,7 +72,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := packet.FromFilename(filename)
+	p, err := packet.FromFilename("pacman", filename)
 	if err != nil {
 		w.WriteHeader(500)
 		return

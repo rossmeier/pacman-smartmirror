@@ -10,6 +10,8 @@ import (
 	"github.com/veecue/pacman-smartmirror/config"
 	"github.com/veecue/pacman-smartmirror/mirrorlist"
 	"github.com/veecue/pacman-smartmirror/server"
+
+	_ "github.com/veecue/pacman-smartmirror/impl/pacman"
 )
 
 func main() {

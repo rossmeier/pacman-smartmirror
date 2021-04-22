@@ -165,11 +165,11 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 // updatePackets will update all locally cached packages that are part of the given repository
 func (c *Cache) updatePackets(repo database.Repository) {
 	// List of packages that are out of date
-	toDownload := make([]*packet.Packet, 0)
-	err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p *packet.Packet, _ io.Reader) {
+	toDownload := make([]packet.Packet, 0)
+	err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p packet.Packet, _ io.Reader) {
 		c.mu.Lock()
 		for _, other := range c.packets[repo].FindOtherVersions(p) {
-			if packet.CompareVersions(p.Version, other.Version) > 0 {
+			if packet.CompareVersions(p.Version(), other.Version()) > 0 {
 				// Version in the repository is later than the local one
 				toDownload = append(toDownload, p)
 				break
@@ -185,7 +185,7 @@ func (c *Cache) updatePackets(repo database.Repository) {
 
 	// Update all outdated packages
 	for _, p := range toDownload {
-		if c.backgroundDownload(&download{*p, repo, nil}) == nil {
+		if c.backgroundDownload(&download{p, repo, nil}) == nil {
 			if err != nil {
 				log.Println(errors.Wrapf(err, "Error downloading %s", p.Filename()))
 			}

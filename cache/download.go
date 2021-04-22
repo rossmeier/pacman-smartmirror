@@ -67,7 +67,7 @@ func (dl *ongoingDownload) GetReader() (ReadSeekCloser, error) {
 // exactly once
 func (c *Cache) startDownload(d *download) (*ongoingDownload, error) {
 	for _, mirror := range c.mirrors {
-		req, _ := http.NewRequest("GET", mirror.PacketURL(&d.P, &d.R), nil)
+		req, _ := http.NewRequest("GET", mirror.PacketURL(d.P, &d.R), nil)
 		req.Header.Set("User-Agent", "pacman-smartmirror/0.0")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -157,8 +157,8 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 	}
 
 	// Remove old versions
-	for _, p := range c.packets[dl.Dl.R].FindOtherVersions(&dl.Dl.P) {
-		diff := packet.CompareVersions(p.Version, dl.Dl.P.Version)
+	for _, p := range c.packets[dl.Dl.R].FindOtherVersions(dl.Dl.P) {
+		diff := packet.CompareVersions(p.Version(), dl.Dl.P.Version())
 		if diff < 0 {
 			os.Remove(filepath.Join(c.directory, dl.Dl.R.Arch, dl.Dl.R.Name, p.Filename()))
 			c.packets[dl.Dl.R].Delete(p.Filename())
@@ -170,7 +170,7 @@ func (c *Cache) finalizeDownload(dl *ongoingDownload, err error) {
 		c.packets[dl.Dl.R] = make(packet.Set)
 	}
 
-	c.packets[dl.Dl.R].Insert(&dl.Dl.P)
+	c.packets[dl.Dl.R].Insert(dl.Dl.P)
 	delete(c.downloads, dl.Dl.Path())
 
 	log.Println("Packet", dl.Dl.R, dl.Dl.P.Filename(), "now available!")

@@ -56,7 +56,7 @@ func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
 // init scans the cache directory and inits the packet and database caches accordingly
 func (c *Cache) init() error {
 	// Migrate packages stored directly in the dir to their proper repo location
-	migrationList := make([]*packet.Packet, 0)
+	migrationList := make([]packet.Packet, 0)
 
 	err := filepath.Walk(c.directory, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -80,7 +80,7 @@ func (c *Cache) init() error {
 
 		if len(parts) == 1 {
 			filename := parts[0]
-			p, err := packet.FromFilename(filename)
+			p, err := packet.FromFilename("pacman", filename)
 			if err != nil {
 				return errors.Wrapf(err, "Invalid packet in directory")
 			}
@@ -105,7 +105,7 @@ func (c *Cache) init() error {
 
 		if len(parts) == 3 {
 			filename := parts[2]
-			p, err := packet.FromFilename(filename)
+			p, err := packet.FromFilename("pacman", filename)
 			if err != nil {
 				return errors.Wrapf(err, "Invalid packet in directory")
 			}
@@ -134,7 +134,7 @@ func (c *Cache) init() error {
 
 // GetPacket serves a packet either from the cache or proxies it from a mirror
 // Returns an io.ReadSeaker with access to the packet data
-func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeekCloser, error) {
+func (c *Cache) GetPacket(p packet.Packet, repo *database.Repository) (ReadSeekCloser, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -142,7 +142,7 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeek
 	go c.addRepo(repo, nil)
 
 	// First: check if the packet is currently being downloaded
-	if download, ok := c.downloads[(&download{P: *p, R: *repo}).Path()]; ok && download.Dl.P == *p {
+	if download, ok := c.downloads[(&download{P: p, R: *repo}).Path()]; ok && download.Dl.P == p {
 		return download.GetReader()
 	}
 
@@ -158,14 +158,14 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeek
 
 	// Bail out if newer package version exists
 	for _, cachedP := range c.packets[*repo].FindOtherVersions(p) {
-		versionDiff := packet.CompareVersions(p.Version, cachedP.Version)
+		versionDiff := packet.CompareVersions(p.Version(), cachedP.Version())
 		if versionDiff < 0 {
 			return nil, errors.New("Newer version available")
 		}
 	}
 
 	// Third: download packet to cache
-	download, err := c.startDownload(&download{*p, *repo, nil})
+	download, err := c.startDownload(&download{p, *repo, nil})
 	if err != nil {
 		return nil, errors.Wrap(err, "Error downloading the packet")
 	}
@@ -174,9 +174,9 @@ func (c *Cache) GetPacket(p *packet.Packet, repo *database.Repository) (ReadSeek
 
 // AddPacket downloads the given packet in the background when possible and
 // adds it to the cache afterwards
-func (c *Cache) AddPacket(p *packet.Packet, repo *database.Repository) {
+func (c *Cache) AddPacket(p packet.Packet, repo *database.Repository) {
 	go c.backgroundDownload(&download{
-		P: *p,
+		P: p,
 		R: *repo,
 	})
 }

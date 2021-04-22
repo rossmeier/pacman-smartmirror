@@ -69,7 +69,7 @@ func FromReader(r io.Reader) (Mirrorlist, error) {
 }
 
 // PacketURL returns the actual URL of a given packet
-func (m Mirror) PacketURL(p *packet.Packet, repo *database.Repository) string {
+func (m Mirror) PacketURL(p packet.Packet, repo *database.Repository) string {
 	r := strings.ReplaceAll(string(m), "$repo", repo.Name)
 	r = strings.ReplaceAll(r, "$arch", repo.Arch)
 	r = strings.TrimSuffix(r, "/")

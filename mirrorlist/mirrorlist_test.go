@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/veecue/pacman-smartmirror/database"
 	"github.com/veecue/pacman-smartmirror/packet"
+
+	_ "github.com/veecue/pacman-smartmirror/impl/pacman"
 )
 
 const mirrorlistGood = `## Germany
@@ -31,7 +33,7 @@ func TestMirrorlistGood(t *testing.T) {
 	assert.Equal(t, "http://mirror.pseudoform.org/$repo/os/$arch", string(m[0]))
 	assert.Equal(t, "http://mirrors.arnoldthebat.co.uk/archlinux/$repo/os/$arch", string(m[1]))
 
-	p, err := packet.FromFilename("youtube-dl-2019.07.02-1-any.pkg.tar.xz")
+	p, err := packet.FromFilename("pacman", "youtube-dl-2019.07.02-1-any.pkg.tar.xz")
 	assert.NoError(t, err)
 	assert.Equal(t,
 		"http://mirrors.arnoldthebat.co.uk/archlinux/community/os/x86_64/"+p.Filename(),

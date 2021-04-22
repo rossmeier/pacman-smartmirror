@@ -25,7 +25,7 @@ func (r Repository) String() string {
 // PacketCallback is a callback for packets that will receive the packet parsed from
 // the filename and a reader containing the rest of the packages "desc" file with
 // further information
-type PacketCallback func(*packet.Packet, io.Reader)
+type PacketCallback func(packet.Packet, io.Reader)
 
 // ParseDBFromFile reads a pacman .db file and call cb for each packet directly from File
 func ParseDBFromFile(filename string, cb PacketCallback) error {
@@ -75,9 +75,12 @@ func ParseDBSlice(r io.Reader) ([]packet.Packet, error) {
 func ParseDBGUnzippedSlice(r io.Reader) ([]packet.Packet, error) {
 	readDb := make([]packet.Packet, 0)
 
-	ParseDBGUnzipped(r, func(p *packet.Packet, _ io.Reader) {
-		readDb = append(readDb, *p)
+	err := ParseDBGUnzipped(r, func(p packet.Packet, _ io.Reader) {
+		readDb = append(readDb, p)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return readDb, nil
 }
@@ -113,7 +116,7 @@ func ParseDBGUnzipped(r io.Reader, cb PacketCallback) error {
 		if err != nil {
 			return (err)
 		}
-		p, err := packet.FromFilename(filename)
+		p, err := packet.FromFilename("pacman", filename)
 		if err != nil {
 			return (err)
 		}

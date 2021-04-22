@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/veecue/pacman-smartmirror/packet"
+
+	_ "github.com/veecue/pacman-smartmirror/impl/pacman"
 )
 
 const fileGood = `%FILENAME%
@@ -183,18 +185,16 @@ func TestDBParser(t *testing.T) {
 	database, err := ParseDBGUnzippedSlice(bytes.NewReader(createTestTar()))
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(database))
-	assert.Equal(t, database[0].Name, "acl")
-	assert.Equal(t, database[0].Version, "2.2.53-1")
-	assert.Equal(t, database[0].Arch, "x86_64")
+	assert.Equal(t, database[0].Name(), "acl")
+	assert.Equal(t, database[0].Version(), "2.2.53-1")
 
-	assert.Equal(t, database[1].Name, "gcc")
-	assert.Equal(t, database[1].Version, "9.1.0-2")
-	assert.Equal(t, database[1].Arch, "x86_64")
+	assert.Equal(t, database[1].Name(), "gcc")
+	assert.Equal(t, database[1].Version(), "9.1.0-2")
 }
 
 func TestOtherAttributes(t *testing.T) {
 	first := true
-	err := ParseDBGUnzipped(bytes.NewReader(createTestTar()), func(p *packet.Packet, r io.Reader) {
+	err := ParseDBGUnzipped(bytes.NewReader(createTestTar()), func(p packet.Packet, r io.Reader) {
 		if !first {
 			return
 		}
