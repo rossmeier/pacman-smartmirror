@@ -32,7 +32,7 @@ func (c *Cache) migrate(toMigrate []packet.Packet) error {
 	}
 	cache := make(map[string]*hasRepo)
 	for repo := range c.repos {
-		err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"),
+		err := database.ParseDBFromFile("pacman", filepath.Join(c.directory, repo.Arch, repo.Name+".db"),
 			func(p packet.Packet, r io.Reader) {
 				size, ok := sizes[p.Filename()]
 				if !ok {

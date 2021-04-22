@@ -166,7 +166,7 @@ func (c *Cache) downloadRepo(repo *database.Repository, result chan<- error) err
 func (c *Cache) updatePackets(repo database.Repository) {
 	// List of packages that are out of date
 	toDownload := make([]packet.Packet, 0)
-	err := database.ParseDBFromFile(filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p packet.Packet, _ io.Reader) {
+	err := database.ParseDBFromFile("pacman", filepath.Join(c.directory, repo.Arch, repo.Name+".db"), func(p packet.Packet, _ io.Reader) {
 		c.mu.Lock()
 		for _, other := range c.packets[repo].FindOtherVersions(p) {
 			if packet.CompareVersions(p.Version(), other.Version()) > 0 {

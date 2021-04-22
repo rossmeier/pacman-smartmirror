@@ -1,17 +1,17 @@
-package database
+package pacman
 
 import (
 	"archive/tar"
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"io"
 	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/veecue/pacman-smartmirror/database"
 	"github.com/veecue/pacman-smartmirror/packet"
-
-	_ "github.com/veecue/pacman-smartmirror/impl/pacman"
 )
 
 const fileGood = `%FILENAME%
@@ -154,7 +154,8 @@ inetutils`
 func createTestTar() []byte {
 	// Create and add some files to the archive.
 	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
 	var files = []struct {
 		Name, Body string
 	}{
@@ -177,24 +178,28 @@ func createTestTar() []byte {
 	if err := tw.Close(); err != nil {
 		log.Fatal(err)
 	}
+	gw.Close()
 
 	return buf.Bytes()
 }
 
 func TestDBParser(t *testing.T) {
-	database, err := ParseDBGUnzippedSlice(bytes.NewReader(createTestTar()))
+	packets := make([]packet.Packet, 0)
+	err := database.ParseDB("pacman", bytes.NewReader(createTestTar()), func(pkg packet.Packet, _ io.Reader) {
+		packets = append(packets, pkg)
+	})
 	assert.NoError(t, err)
-	assert.Equal(t, 2, len(database))
-	assert.Equal(t, database[0].Name(), "acl")
-	assert.Equal(t, database[0].Version(), "2.2.53-1")
+	assert.Equal(t, 2, len(packets))
+	assert.Equal(t, packets[0].Name(), "acl")
+	assert.Equal(t, packets[0].Version(), "2.2.53-1")
 
-	assert.Equal(t, database[1].Name(), "gcc")
-	assert.Equal(t, database[1].Version(), "9.1.0-2")
+	assert.Equal(t, packets[1].Name(), "gcc")
+	assert.Equal(t, packets[1].Version(), "9.1.0-2")
 }
 
 func TestOtherAttributes(t *testing.T) {
 	first := true
-	err := ParseDBGUnzipped(bytes.NewReader(createTestTar()), func(p packet.Packet, r io.Reader) {
+	err := database.ParseDB("pacman", bytes.NewReader(createTestTar()), func(p packet.Packet, r io.Reader) {
 		if !first {
 			return
 		}
