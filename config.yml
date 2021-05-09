@@ -10,13 +10,13 @@ repos:
   archlinux/$repo/os/armv7h:
     impl: pacman
     upstreams:
-      - https://mirror.archlinuxarm.org/armv7h/$repo
+      - http://mirror.archlinuxarm.org/armv7h/$repo
     args:
       reponame: $repo
   archlinux/$repo/os/aarch64:
     impl: pacman
     upstreams:
-      - https://mirror.archlinuxarm.org/aarch64/$repo
+      - http://mirror.archlinuxarm.org/aarch64/$repo
     args:
       reponame: $repo
   alpine/$version/$repo/$arch:
