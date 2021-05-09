@@ -8,22 +8,18 @@ import (
 
 	"github.com/veecue/pacman-smartmirror/cache"
 	"github.com/veecue/pacman-smartmirror/config"
-	"github.com/veecue/pacman-smartmirror/mirrorlist"
 	"github.com/veecue/pacman-smartmirror/server"
 
+	_ "github.com/veecue/pacman-smartmirror/impl/apk"
 	_ "github.com/veecue/pacman-smartmirror/impl/pacman"
 )
 
 func main() {
 	flag.Parse()
-	log.Printf(`Loading mirrorlist file: "%s"`, config.C.MirrorlistFile)
-	m, err := mirrorlist.FromFile(config.C.MirrorlistFile)
-	if err != nil {
-		log.Fatalf(`Error reading mirrorlist "%s": %v`, config.C.MirrorlistFile, err)
-	}
+	config.Init()
 
 	log.Printf(`Initing package cache in "%s"`, config.C.CacheDirectory)
-	c, err := cache.New(config.C.CacheDirectory, m)
+	c, err := cache.New(config.C.CacheDirectory, config.C.Repos)
 	if err != nil {
 		log.Fatalf(`Error initing cache "%s": %v`, config.C.CacheDirectory, err)
 	}

@@ -7,12 +7,14 @@ import (
 	"github.com/veecue/pacman-smartmirror/packet"
 )
 
+var i = newPacmanImpl(map[string]string{"reponame": "core"})
+
 func TestFilename(t *testing.T) {
 	for _, filename := range []string{
 		"xorg-util-macros-1.19.2-1-any.pkg.tar.xz",
 		"xorg-util-macros-1.21.2-1-any.pkg.tar.zst",
 	} {
-		packet, err := fromFilename(filename)
+		packet, err := i.PacketFromFilename(filename)
 		assert.NoError(t, err, "Error while parsing filename: %v", err)
 		assert.Equal(t, filename, packet.Filename())
 	}
@@ -23,7 +25,7 @@ func TestInvalidFilename(t *testing.T) {
 		"linux.pkg.tar.xz",
 		"xorg-util-macros-1.21.2-1-any.pkg.tar.foo",
 	} {
-		_, err := fromFilename(filename)
+		_, err := i.PacketFromFilename(filename)
 		assert.Error(t, err)
 	}
 }

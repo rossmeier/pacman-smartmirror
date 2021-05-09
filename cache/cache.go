@@ -1,15 +1,18 @@
 package cache
 
 import (
+	"errors"
+	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/veecue/pacman-smartmirror/cache/downloadmanager"
+	"github.com/veecue/pacman-smartmirror/config"
 	"github.com/veecue/pacman-smartmirror/database"
-	"github.com/veecue/pacman-smartmirror/mirrorlist"
 	"github.com/veecue/pacman-smartmirror/packet"
 )
 
@@ -17,15 +20,13 @@ import (
 // The currently only implementation at the moment is storing
 // it in a directory in the filesystem.
 type Cache struct {
-	directory     string
-	mirrors       mirrorlist.Mirrorlist
-	packets       map[database.Repository]packet.Set
-	downloads     map[string]*ongoingDownload
-	repos         map[database.Repository]struct{}
-	repoDownloads map[database.Repository]struct{}
-	mu            sync.Mutex
-	repoMu        sync.Mutex
-	bgDownload    sync.Mutex
+	directory       string
+	packets         map[string]packet.Set
+	repos           map[string]struct{}
+	downloadManager *downloadmanager.DownloadManager
+	r               *database.Router
+	mu              sync.Mutex
+	repoMu          sync.Mutex
 }
 
 // ReadSeekCloser implements io.ReadSeeker and io.Closer
@@ -35,14 +36,13 @@ type ReadSeekCloser interface {
 }
 
 // New creates a new cache from a given directory
-func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
+func New(directory string, cfg config.RepoConfigs) (*Cache, error) {
 	c := &Cache{
-		directory:     directory,
-		packets:       make(map[database.Repository]packet.Set),
-		mirrors:       mirrors,
-		downloads:     make(map[string]*ongoingDownload),
-		repos:         make(map[database.Repository]struct{}),
-		repoDownloads: make(map[database.Repository]struct{}),
+		directory:       directory,
+		downloadManager: downloadmanager.New(),
+		packets:         make(map[string]packet.Set),
+		repos:           make(map[string]struct{}),
+		r:               database.NewRouter(cfg),
 	}
 
 	err := c.init()
@@ -55,9 +55,6 @@ func New(directory string, mirrors mirrorlist.Mirrorlist) (*Cache, error) {
 
 // init scans the cache directory and inits the packet and database caches accordingly
 func (c *Cache) init() error {
-	// Migrate packages stored directly in the dir to their proper repo location
-	migrationList := make([]packet.Packet, 0)
-
 	err := filepath.Walk(c.directory, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -76,107 +73,117 @@ func (c *Cache) init() error {
 			return os.Remove(path)
 		}
 
-		parts := strings.Split(rel, string(filepath.Separator))
-
-		if len(parts) == 1 {
-			filename := parts[0]
-			p, err := packet.FromFilename("pacman", filename)
-			if err != nil {
-				return errors.Wrapf(err, "Invalid packet in directory")
-			}
-
-			migrationList = append(migrationList, p)
+		match := c.r.MatchPath(rel)
+		if match == nil {
+			// ignore unmatched files
+			log.Printf("Found unkown path %s, migrate data or adapt config", rel)
+			return nil
 		}
 
-		if len(parts) == 2 {
-			arch := parts[0]
-			db := parts[1]
-
-			if !strings.HasSuffix(db, ".db") {
-				return nil
-			}
-
-			c.repos[database.Repository{
-				Name: strings.TrimSuffix(db, ".db"),
-				Arch: arch,
-			}] = struct{}{}
-			return err
+		if match.Path() == match.DBPath() {
+			// repository file
+			c.repos[match.MatchedPath] = struct{}{}
+			return nil
 		}
 
-		if len(parts) == 3 {
-			filename := parts[2]
-			p, err := packet.FromFilename("pacman", filename)
-			if err != nil {
-				return errors.Wrapf(err, "Invalid packet in directory")
-			}
-
-			repo := database.Repository{
-				Arch: parts[0],
-				Name: parts[1],
-			}
-
-			if _, ok := c.packets[repo]; !ok {
-				c.packets[repo] = make(packet.Set)
-			}
-
-			c.packets[repo].Insert(p)
+		packetinfo, err := match.Packet()
+		if err != nil {
+			return fmt.Errorf("error parsing packet filename %s: %w", match.Filename, err)
 		}
+
+		if _, ok := c.packets[match.MatchedPath]; !ok {
+			c.packets[match.MatchedPath] = make(packet.Set)
+		}
+		c.packets[match.MatchedPath].Insert(packetinfo)
 
 		return nil
 	})
 
-	if err != nil {
-		return errors.Wrap(err, "Error reading cache directory")
-	}
-
-	return errors.Wrap(c.migrate(migrationList), "Error migrating")
+	return err
 }
 
 // GetPacket serves a packet either from the cache or proxies it from a mirror
 // Returns an io.ReadSeaker with access to the packet data
-func (c *Cache) GetPacket(p packet.Packet, repo *database.Repository) (ReadSeekCloser, error) {
+func (c *Cache) GetPacket(searchpath string) (ReadSeekCloser, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Download the packet's repo in the backround if we don't have it yet
-	go c.addRepo(repo, nil)
-
-	// First: check if the packet is currently being downloaded
-	if download, ok := c.downloads[(&download{P: p, R: *repo}).Path()]; ok && download.Dl.P == p {
-		return download.GetReader()
+	match := c.r.MatchPath(searchpath)
+	if match == nil {
+		return nil, fmt.Errorf("no match for packet path %s", searchpath)
 	}
 
-	// Second: check if the packet already is available in cache
-	if cachedP := c.packets[*repo].ByFilename(p.Filename()); cachedP != nil {
-		f, err := os.Open(filepath.Join(c.directory, repo.Arch, repo.Name, cachedP.Filename()))
-		if err != nil {
-			return nil, errors.Wrap(err, "Error opening cached packet file")
-		}
-
-		return f, nil
+	p, err := match.Packet()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing packet for filename %s: %w", match.Filename, err)
 	}
 
 	// Bail out if newer package version exists
-	for _, cachedP := range c.packets[*repo].FindOtherVersions(p) {
+	for _, cachedP := range c.packets[match.MatchedPath].FindOtherVersions(p) {
 		versionDiff := packet.CompareVersions(p.Version(), cachedP.Version())
 		if versionDiff < 0 {
-			return nil, errors.New("Newer version available")
+			return nil, errors.New("newer version available")
 		}
 	}
 
-	// Third: download packet to cache
-	download, err := c.startDownload(&download{p, *repo, nil})
+	// Download packet to cache (or serve from ongoing download)
+	result := make(chan error)
+	rd, async, err := c.downloadManager.GetFile(filepath.Join(c.directory, filepath.FromSlash(match.Path())), match.UpstreamURLs, result, false)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error downloading the packet")
+		return nil, fmt.Errorf("error downloading the packet: %w", err)
 	}
-	return download.GetReader()
+
+	if async {
+		go func() {
+			err := <-result
+			if err != nil {
+				log.Println("Error downloading packet:", err)
+				return
+			}
+			c.finalizeDownload(match.MatchedPath, p)
+		}()
+	}
+
+	// Download the packet's repo in the backround if we don't have it yet
+	go c.addRepo(match.MatchedPath)
+
+	return rd, nil
 }
 
-// AddPacket downloads the given packet in the background when possible and
+// AddPacket synchronously downloads the given packet in the background when possible and
 // adds it to the cache afterwards
-func (c *Cache) AddPacket(p packet.Packet, repo *database.Repository) {
-	go c.backgroundDownload(&download{
-		P: p,
-		R: *repo,
-	})
+func (c *Cache) AddPacket(searchpath string) error {
+	match := c.r.MatchPath(searchpath)
+	if match == nil {
+		return fmt.Errorf("no match for packet path %s", searchpath)
+	}
+
+	p, err := match.Packet()
+	if err != nil {
+		return fmt.Errorf("error parsing packet for filename %s: %w", match.Filename, err)
+	}
+
+	// Bail out if newer package version exists
+	c.mu.Lock()
+	for _, cachedP := range c.packets[match.MatchedPath].FindOtherVersions(p) {
+		versionDiff := packet.CompareVersions(p.Version(), cachedP.Version())
+		if versionDiff < 0 {
+			c.mu.Unlock()
+			return errors.New("newer version available")
+		}
+	}
+	c.mu.Unlock()
+
+	// Download packet to cache (or serve from ongoing download)
+	err = c.downloadManager.BackgroundDownload(filepath.Join(c.directory, filepath.FromSlash(match.Path())), match.UpstreamURLs)
+	if err != nil {
+		return fmt.Errorf("error downloading the packet: %w", err)
+	}
+
+	c.finalizeDownload(match.MatchedPath, p)
+
+	// Download the packet's repo in the backround if we don't have it yet
+	c.addRepo(match.MatchedPath)
+
+	return nil
 }

@@ -1,14 +1,15 @@
 package server
 
 import (
+	"errors"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
 	"github.com/veecue/pacman-smartmirror/cache"
-	"github.com/veecue/pacman-smartmirror/database"
-	"github.com/veecue/pacman-smartmirror/packet"
+	"github.com/veecue/pacman-smartmirror/impl"
 )
 
 // Server is an http proxy server that uses a cache
@@ -36,61 +37,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parts := strings.Split(r.RequestURI, "/")
-	if len(parts) != 5 {
-		http.NotFound(w, r)
-		return
-	}
-
-	if parts[2] != "os" {
-		http.NotFound(w, r)
-		return
-	}
-
-	repo := &database.Repository{
-		Name: parts[1],
-		Arch: parts[3],
-	}
-
-	filename := parts[4]
-
-	if strings.HasSuffix(filename, ".db") {
-		if repo.Name != strings.TrimSuffix(filename, ".db") {
-			http.NotFound(w, r)
-			return
-		}
-
-		reader, modtime, err := s.packetCache.GetDBFile(repo)
-		if err != nil {
-			// Proxy database directly from mirror if not in cache
-			s.packetCache.ProxyRepo(w, r, repo)
-			return
-		}
-
-		defer reader.Close()
-		http.ServeContent(w, r, filename, modtime, reader)
-		return
-	}
-
-	p, err := packet.FromFilename("pacman", filename)
-	if err != nil {
-		w.WriteHeader(500)
-		return
-	}
-
 	if _, ok := r.URL.Query()["bg"]; r.Method == "HEAD" && ok {
-		s.packetCache.AddPacket(p, repo)
+		go s.packetCache.AddPacket(r.URL.Path)
 		w.WriteHeader(200)
 		return
 	}
 
-	reader, err := s.packetCache.GetPacket(p, repo)
-	if err != nil {
-		log.Println("Error serving", p.Filename(), err)
+	reader, err := s.packetCache.GetPacket(r.URL.Path)
+	if err == nil {
+		defer reader.Close()
+		http.ServeContent(w, r, "", time.Time{}, reader)
+		return
+	}
+
+	if !errors.Is(err, impl.ErrInvalidFilename) {
+		log.Println(err)
 		http.NotFound(w, r)
 		return
 	}
 
-	defer reader.Close()
-	http.ServeContent(w, r, filename, time.Time{}, reader)
+	// maybe it is a repo file
+	reader, t, err := s.packetCache.GetDBFile(path.Dir(r.URL.Path))
+	if err == nil {
+		defer reader.Close()
+		http.ServeContent(w, r, path.Base(r.URL.Path), t, reader)
+		return
+	}
+
+	s.packetCache.ProxyRepo(w, r)
 }

@@ -3,6 +3,6 @@ module github.com/veecue/pacman-smartmirror
 go 1.12
 
 require (
-	github.com/pkg/errors v0.8.1
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.7.0
+	gopkg.in/yaml.v2 v2.4.0
 )

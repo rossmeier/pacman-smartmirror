@@ -1,4 +1,4 @@
-package pacman
+package apk
 
 import (
 	"fmt"
@@ -9,15 +9,13 @@ import (
 )
 
 var (
-	filenameRegex = regexp.MustCompile(`(.+)-(.+-.+)-(.+)\.pkg\.tar\.(xz|zst)`)
+	filenameRegex = regexp.MustCompile(`(.+)-(.+-.+)\.apk`)
 )
 
 // pkg represents a pacman pkg
 type pkg struct {
-	name        string
-	version     string
-	arch        string
-	compression string
+	name    string
+	version string
 }
 
 var _ packet.Packet = &pkg{}
@@ -32,25 +30,21 @@ func (p *pkg) Name() string {
 
 // Filename returns the corresponding filename the packet is saved as
 func (p *pkg) Filename() string {
-	return fmt.Sprintf("%s-%s-%s.pkg.tar.%s",
+	return fmt.Sprintf("%s-%s.apk",
 		p.name,
 		p.version,
-		p.arch,
-		p.compression,
 	)
 }
 
 // PacketFromFilename parses a packet's filename and returns the parsed information
-func (*pacmanImpl) PacketFromFilename(filename string) (packet.Packet, error) {
+func (*apkImpl) PacketFromFilename(filename string) (packet.Packet, error) {
 	matches := filenameRegex.FindStringSubmatch(filename)
-	if len(matches) != 5 {
+	if len(matches) != 3 {
 		return nil, impl.ErrInvalidFilename
 	}
 
 	return &pkg{
-		name:        matches[1],
-		version:     matches[2],
-		arch:        matches[3],
-		compression: matches[4],
+		name:    matches[1],
+		version: matches[2],
 	}, nil
 }

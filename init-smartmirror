@@ -23,7 +23,7 @@ do
 	if [[ $(pacman -Qi $NAME | grep $ARCH) ]]; then
 		PKGARCH=$ARCH
 	fi
-	RPATH=$REPO/os/$ARCH/$NAME-$VERSION-$PKGARCH.pkg.tar.xz
+	RPATH=archlinux/$REPO/os/$ARCH/$NAME-$VERSION-$PKGARCH.pkg.tar.zst
 	echo "Requesting $RPATH"
 	curl -I "$SERVER/$RPATH?bg" &> /dev/null
 done

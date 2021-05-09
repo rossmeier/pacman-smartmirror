@@ -2,15 +2,12 @@ package pacman
 
 import (
 	"archive/tar"
-	"bufio"
 	"bytes"
 	"compress/gzip"
-	"io"
 	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/veecue/pacman-smartmirror/database"
 	"github.com/veecue/pacman-smartmirror/packet"
 )
 
@@ -185,7 +182,7 @@ func createTestTar() []byte {
 
 func TestDBParser(t *testing.T) {
 	packets := make([]packet.Packet, 0)
-	err := database.ParseDB("pacman", bytes.NewReader(createTestTar()), func(pkg packet.Packet, _ io.Reader) {
+	err := i.ParseDB(bytes.NewReader(createTestTar()), func(pkg packet.Packet) {
 		packets = append(packets, pkg)
 	})
 	assert.NoError(t, err)
@@ -195,31 +192,4 @@ func TestDBParser(t *testing.T) {
 
 	assert.Equal(t, packets[1].Name(), "gcc")
 	assert.Equal(t, packets[1].Version(), "9.1.0-2")
-}
-
-func TestOtherAttributes(t *testing.T) {
-	first := true
-	err := database.ParseDB("pacman", bytes.NewReader(createTestTar()), func(p packet.Packet, r io.Reader) {
-		if !first {
-			return
-		}
-		first = false
-
-		rd := bufio.NewReader(r)
-		for {
-			line, err := rd.ReadString('\n')
-			assert.NoError(t, err)
-			if err != nil {
-				break
-			}
-			if line == "%SHA256SUM%\n" {
-				line, err = rd.ReadString('\n')
-				assert.NoError(t, err)
-				assert.Equal(t, "27f4020c77a11992a75b5b99bc1c22797defcea6283b77eb2c311d77b3404443\n", line)
-				break
-			}
-		}
-	})
-
-	assert.NoError(t, err)
 }

@@ -1,17 +1,41 @@
 package config
 
-import "flag"
+import (
+	"flag"
+	"io/ioutil"
+	"log"
+
+	"gopkg.in/yaml.v2"
+)
+
+var filepath = flag.String("c", "config.yml", "Configuration file")
+
+// RepoConfig is the configuration for one specific remote repository
+type RepoConfig struct {
+	Impl      string            `yaml:"impl"`
+	Upstreams []string          `yaml:"upstreams"`
+	Args      map[string]string `yaml:"args"`
+}
+
+// RepoConfigs are many RepoConfigs at once
+type RepoConfigs map[string]RepoConfig
 
 // C represents the applications current config
 var C struct {
-	CacheDirectory string
-	MirrorlistFile string
-	Listen         string
+	CacheDirectory string      `yaml:"cache_dir"`
+	Listen         string      `yaml:"listen"`
+	Repos          RepoConfigs `yaml:"repos"`
 }
 
-func init() {
-	flag.StringVar(&C.CacheDirectory, "d", "", "Directory to use for the cached packages")
-	flag.StringVar(&C.MirrorlistFile, "m", "", "Filename of the mirrorlist to use")
-	flag.StringVar(&C.Listen, "l", ":41234", "Address and port for the HTTP server to listen on")
-	flag.Parse()
+// Init intializes the config from the parsed commandline flags
+// needs to be called after flag.Parse()
+func Init() {
+	data, err := ioutil.ReadFile(*filepath)
+	if err != nil {
+		log.Fatal("Error reading config file:", err)
+	}
+	err = yaml.Unmarshal(data, &C)
+	if err != nil {
+		log.Fatal("Error parsing config file:", err)
+	}
 }

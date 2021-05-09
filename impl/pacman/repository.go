@@ -4,27 +4,28 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
+	"fmt"
 	"io"
+	"path"
 	"path/filepath"
 
-	"github.com/pkg/errors"
-	"github.com/veecue/pacman-smartmirror/database"
-	"github.com/veecue/pacman-smartmirror/packet"
+	"github.com/veecue/pacman-smartmirror/impl"
 )
 
 // ParseDB reads a pacman .db file and will call cb for each packet
-func ParseDB(r io.Reader, cb database.PacketCallback) error {
+func (i *pacmanImpl) ParseDB(r io.Reader, cb impl.PacketCallback) error {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
-		return errors.Wrap(err, "Error gunzipping file")
+		return fmt.Errorf("error gunzipping file: %w", err)
 	}
 	defer zr.Close()
 
-	return parseDBGUnzipped(zr, cb)
+	return i.parseDBGUnzipped(zr, cb)
 }
 
 // parseDBGUnzipped reads a pacman .db file and will call cb for each packet
-func parseDBGUnzipped(r io.Reader, cb database.PacketCallback) error {
+func (i *pacmanImpl) parseDBGUnzipped(r io.Reader, cb impl.PacketCallback) error {
 
 	buf := &bytes.Buffer{}
 	reader := tar.NewReader(r)
@@ -34,7 +35,7 @@ func parseDBGUnzipped(r io.Reader, cb database.PacketCallback) error {
 			return nil
 		}
 		if err != nil {
-			return errors.Wrap(err, "Error while reading tar")
+			return fmt.Errorf("error while reading tar: %w", err)
 		}
 		if pkg.FileInfo().IsDir() {
 			continue
@@ -54,17 +55,17 @@ func parseDBGUnzipped(r io.Reader, cb database.PacketCallback) error {
 		if err != nil {
 			return (err)
 		}
-		p, err := packet.FromFilename("pacman", filename)
+		p, err := i.PacketFromFilename(filename)
 		if err != nil {
 			return (err)
 		}
 
-		cb(p, buf)
+		cb(p)
 
 		buf.Reset()
 	}
 }
 
-func init() {
-	database.RegisterImpl("pacman", ParseDB)
+func (i *pacmanImpl) GetDB(repopath string) string {
+	return path.Join(repopath, i.reponame+".db")
 }

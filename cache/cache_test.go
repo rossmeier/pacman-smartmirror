@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,9 +15,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/veecue/pacman-smartmirror/database"
-	"github.com/veecue/pacman-smartmirror/mirrorlist"
-	"github.com/veecue/pacman-smartmirror/packet"
+
+	"github.com/veecue/pacman-smartmirror/config"
 	"github.com/veecue/pacman-smartmirror/test"
 
 	_ "github.com/veecue/pacman-smartmirror/impl/pacman"
@@ -69,35 +69,31 @@ func TestSimple(t *testing.T) {
 		assert.NoError(t, ioutil.WriteFile(filepath.Join(dir, _arch, _repo, f), []byte("nothing here"), 0644))
 	}
 
-	c, err := New(dir, mirrorlist.Mirrorlist{mirrorlist.Mirror(s.URL)})
+	c, err := New(dir, config.RepoConfigs{
+		"$arch/$repo": {
+			Impl:      "pacman",
+			Upstreams: []string{s.URL},
+			Args: map[string]string{
+				"reponame": "$repo",
+			},
+		},
+	})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(c.packets), "Wrong packet number (packets: %v)", c.packets)
-	repo := database.Repository{
-		Name: _repo,
-		Arch: _arch,
-	}
+	repo := path.Join(_arch, _repo)
 	assert.Contains(t, c.packets, repo)
 	for _, p := range c.packets[repo] {
 		assert.Equal(t, existing, p.Filename())
 	}
 	_, err = os.Stat(filepath.Join(dir, part))
 	assert.True(t, os.IsNotExist(err))
-
-	p, err := packet.FromFilename("pacman", _filename)
-	assert.NoError(t, err)
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r, err := c.GetPacket(p, &database.Repository{
-				Name: _repo,
-				Arch: _arch,
-			})
+			r, err := c.GetPacket(path.Join(repo, _filename))
 			assert.NoError(t, err)
-			if err != nil {
-				t.FailNow()
-			}
 			assert.Equal(t, len(_content), getSize(t, r))
 			var b bytes.Buffer
 			_, err = io.CopyN(&b, r, int64(len(_content)))
