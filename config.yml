@@ -1,10 +1,22 @@
 cache_dir: data
 listen: ":41234"
 repos:
-  archlinux/$repo/os/$arch:
+  archlinux/$repo/os/x86_64:
     impl: pacman
     upstreams:
-      - https://ftp.halifax.rwth-aachen.de/archlinux/$repo/os/$arch
+      - https://ftp.halifax.rwth-aachen.de/archlinux/$repo/os/x86_64
+    args:
+      reponame: $repo
+  archlinux/$repo/os/armv7h:
+    impl: pacman
+    upstreams:
+      - https://mirror.archlinuxarm.org/armv7h/$repo
+    args:
+      reponame: $repo
+  archlinux/$repo/os/aarch64:
+    impl: pacman
+    upstreams:
+      - https://mirror.archlinuxarm.org/aarch64/$repo
     args:
       reponame: $repo
   alpine/$version/$repo/$arch:

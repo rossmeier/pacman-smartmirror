@@ -112,8 +112,6 @@ func (m *DownloadManager) GetFile(path string, urlAlternatives []string, result 
 		}
 
 		if resp.StatusCode != 200 {
-			log.Println(url)
-			log.Println("Status not 200")
 			continue
 		}
 
