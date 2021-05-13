@@ -45,7 +45,7 @@ func (c *Cache) downloadRepo(dirpath string) error {
 		return fmt.Errorf("no match found for repo %s", dirpath)
 	}
 
-	file := match.Impl.GetDB(match.MatchedPath)
+	file := match.DBPath()
 	match = c.r.MatchPath(file)
 	if match == nil {
 		return fmt.Errorf("no match found for repo %s", dirpath)
@@ -75,7 +75,7 @@ func (c *Cache) updatePackets(repodir string) {
 		return
 	}
 
-	file := filepath.Join(c.directory, filepath.FromSlash(match.Impl.GetDB(repodir)))
+	file := filepath.Join(c.directory, filepath.FromSlash(match.DBPath()))
 	f, err := os.Open(file)
 	if err != nil {
 		return
@@ -119,16 +119,17 @@ func (c *Cache) updatePackets(repodir string) {
 // GetDBFile returns the latest cached version of a given database together with
 // the time it was updated.
 func (c *Cache) GetDBFile(repopath string) (ReadSeekCloser, time.Time, error) {
-	if _, ok := c.repos[repopath]; ok {
-		c.repoMu.Lock()
-		defer c.repoMu.Unlock()
+	c.repoMu.Lock()
+	defer c.repoMu.Unlock()
 
-		match := c.r.MatchPath(repopath)
-		if match == nil {
-			return nil, time.Time{}, fmt.Errorf("repo not found")
-		}
-		path := match.Impl.GetDB(match.MatchedPath)
-		file, err := os.Open(path)
+	match := c.r.MatchPath(repopath)
+	if match == nil {
+		return nil, time.Time{}, fmt.Errorf("repo not found")
+	}
+
+	if _, ok := c.repos[match.MatchedPath]; ok {
+		path := match.DBPath()
+		file, err := os.Open(filepath.Join(c.directory, filepath.FromSlash(path)))
 		if err != nil {
 			return nil, time.Time{}, fmt.Errorf("error opening repository file: %w", err)
 		}
