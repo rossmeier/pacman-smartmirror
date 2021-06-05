@@ -129,7 +129,7 @@ func (c *Cache) GetDBFile(path string) (ReadSeekCloser, time.Time, error) {
 
 	if _, ok := c.repos[match.MatchedPath]; ok {
 		p := match.DBPath()
-		if path != p {
+		if path != "/"+p {
 			return nil, time.Time{}, fmt.Errorf("invalid database filename: %s", path)
 		}
 		file, err := os.Open(filepath.Join(c.directory, filepath.FromSlash(p)))
