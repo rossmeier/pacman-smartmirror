@@ -57,7 +57,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// maybe it is a repo file
-	reader, t, err := s.packetCache.GetDBFile(path.Dir(r.URL.Path))
+	reader, t, err := s.packetCache.GetDBFile(r.URL.Path)
 	if err == nil {
 		defer reader.Close()
 		http.ServeContent(w, r, path.Base(r.URL.Path), t, reader)

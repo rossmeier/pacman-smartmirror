@@ -55,6 +55,7 @@ func (i *pacmanImpl) parseDBGUnzipped(r io.Reader, cb impl.PacketCallback) error
 		if err != nil {
 			return (err)
 		}
+		filename = filename[:len(filename)-1]
 		p, err := i.PacketFromFilename(filename)
 		if err != nil {
 			return (err)

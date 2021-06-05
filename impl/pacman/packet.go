@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	filenameRegex = regexp.MustCompile(`(.+)-(.+-.+)-(.+)\.pkg\.tar\.(xz|zst)`)
+	filenameRegex = regexp.MustCompile(`^(.+)-(.+-.+)-(.+)\.pkg\.tar\.(xz|zst)$`)
 )
 
 // pkg represents a pacman pkg

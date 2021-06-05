@@ -118,24 +118,27 @@ func (c *Cache) updatePackets(repodir string) {
 
 // GetDBFile returns the latest cached version of a given database together with
 // the time it was updated.
-func (c *Cache) GetDBFile(repopath string) (ReadSeekCloser, time.Time, error) {
+func (c *Cache) GetDBFile(path string) (ReadSeekCloser, time.Time, error) {
 	c.repoMu.Lock()
 	defer c.repoMu.Unlock()
 
-	match := c.r.MatchPath(repopath)
+	match := c.r.MatchPath(path)
 	if match == nil {
 		return nil, time.Time{}, fmt.Errorf("repo not found")
 	}
 
 	if _, ok := c.repos[match.MatchedPath]; ok {
-		path := match.DBPath()
-		file, err := os.Open(filepath.Join(c.directory, filepath.FromSlash(path)))
+		p := match.DBPath()
+		if path != p {
+			return nil, time.Time{}, fmt.Errorf("invalid database filename: %s", path)
+		}
+		file, err := os.Open(filepath.Join(c.directory, filepath.FromSlash(p)))
 		if err != nil {
 			return nil, time.Time{}, fmt.Errorf("error opening repository file: %w", err)
 		}
 
 		modtime := time.Time{}
-		if stat, err := os.Stat(path); err == nil {
+		if stat, err := os.Stat(p); err == nil {
 			modtime = stat.ModTime()
 		}
 

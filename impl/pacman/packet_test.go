@@ -24,6 +24,7 @@ func TestInvalidFilename(t *testing.T) {
 	for _, filename := range []string{
 		"linux.pkg.tar.xz",
 		"xorg-util-macros-1.21.2-1-any.pkg.tar.foo",
+		"xorg-util-macros-1.21.2-1-any.pkg.tar.zst.sig",
 	} {
 		_, err := i.PacketFromFilename(filename)
 		assert.Error(t, err)

@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	filenameRegex = regexp.MustCompile(`(.+)-(.+-.+)\.apk`)
+	filenameRegex = regexp.MustCompile(`^(.+)-(.+-.+)\.apk$`)
 )
 
 // pkg represents a pacman pkg
