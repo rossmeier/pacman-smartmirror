@@ -106,11 +106,16 @@ func (c *Cache) updatePackets(repodir string) {
 		if match == nil {
 			continue
 		}
+		pkg, err := match.Packet()
+		if err != nil {
+			log.Println(fmt.Errorf("error parsing new version %s: %w", p, err))
+		}
 		if c.downloadManager.BackgroundDownload(filepath.Join(c.directory, filepath.FromSlash(p)), match.UpstreamURLs) == nil {
 			if err != nil {
 				log.Println(fmt.Errorf("error downloading %s: %w", p, err))
 			}
 		}
+		c.finalizeDownload(match.MatchedPath, pkg)
 	}
 
 	log.Println("All cached packages for", repodir, "up to date")
