@@ -120,7 +120,7 @@ func (c *Cache) GetPacket(searchpath string) (ReadSeekCloser, error) {
 
 	// Bail out if newer package version exists
 	for _, cachedP := range c.packets[match.MatchedPath].FindOtherVersions(p) {
-		versionDiff := packet.CompareVersions(p.Version(), cachedP.Version())
+		versionDiff := match.Impl.CompareVersions(p.Version(), cachedP.Version())
 		if versionDiff < 0 {
 			return nil, errors.New("newer version available")
 		}
@@ -166,7 +166,7 @@ func (c *Cache) AddPacket(searchpath string) error {
 	// Bail out if newer package version exists
 	c.mu.Lock()
 	for _, cachedP := range c.packets[match.MatchedPath].FindOtherVersions(p) {
-		versionDiff := packet.CompareVersions(p.Version(), cachedP.Version())
+		versionDiff := match.Impl.CompareVersions(p.Version(), cachedP.Version())
 		if versionDiff < 0 {
 			c.mu.Unlock()
 			return errors.New("newer version available")

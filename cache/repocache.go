@@ -86,7 +86,7 @@ func (c *Cache) updatePackets(repodir string) {
 	err = match.Impl.ParseDB(f, func(p packet.Packet) {
 		c.mu.Lock()
 		for _, other := range c.packets[match.MatchedPath].FindOtherVersions(p) {
-			if packet.CompareVersions(p.Version(), other.Version()) > 0 {
+			if match.Impl.CompareVersions(p.Version(), other.Version()) > 0 {
 				// Version in the repository is later than the local one
 				toDownload = append(toDownload, path.Join(match.MatchedPath, p.Filename()))
 				break

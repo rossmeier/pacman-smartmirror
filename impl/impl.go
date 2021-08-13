@@ -29,6 +29,7 @@ type Impl interface {
 	GetDB(repopath string) string
 	PacketFromFilename(name string) (packet.Packet, error)
 	ParseDB(reader io.Reader, cb PacketCallback) error
+	CompareVersions(v1, v2 string) int
 }
 
 // Get returns the requested registered impl by its name and string arguments

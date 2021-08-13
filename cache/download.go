@@ -16,7 +16,8 @@ func (c *Cache) finalizeDownload(repopath string, pkg packet.Packet) {
 
 	// Remove old versions
 	for _, p := range c.packets[repopath].FindOtherVersions(pkg) {
-		diff := packet.CompareVersions(p.Version(), pkg.Version())
+		match := c.r.MatchPath(repopath)
+		diff := match.Impl.CompareVersions(p.Version(), pkg.Version())
 		if diff < 0 {
 			os.Remove(filepath.Join(c.directory, repopath, p.Filename()))
 			c.packets[repopath].Delete(p.Filename())

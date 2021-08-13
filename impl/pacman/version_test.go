@@ -1,4 +1,4 @@
-package packet
+package pacman
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ func testCompareVersions(t *testing.T, s []string) {
 	// compare all permutations of test list
 	for i := 0; i < len(s); i++ {
 		for j := 0; j < len(s); j++ {
-			r := CompareVersions(s[i], s[j])
+			r := (&pacmanImpl{}).CompareVersions(s[i], s[j])
 			if i < j {
 				assert.Equal(t, -1, r, "%s <! %s", s[i], s[j])
 			} else if i > j {
